@@ -3,7 +3,7 @@ module CoreTests.Equality exposing (suite)
 import Fuzz
 import Test exposing (Test, describe)
 import TestUtils exposing (evalExpect, evalTest, withInt)
-import Types exposing (Value(..))
+import IntTypes exposing (Value(..))
 
 
 type Different

@@ -18,7 +18,7 @@ import Rope
 import Set exposing (Set)
 import Syntax
 import TopologicalSort
-import Types exposing (CallTree(..), Env, EnvValues, Eval, EvalErrorData, EvalResult, PartialEval, PartialResult, Value(..))
+import IntTypes exposing (CallTree(..), Env, EnvValues, Eval, EvalErrorData, EvalResult, PartialEval, PartialResult, Value(..))
 import Unicode
 import Value exposing (nameError, typeError, unsupported)
 

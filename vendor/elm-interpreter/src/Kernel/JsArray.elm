@@ -4,7 +4,7 @@ import Array exposing (Array)
 import Eval.Types as Types
 import EvalResult
 import List.Extra
-import Types exposing (Eval, Value)
+import IntTypes exposing (Eval, Value)
 import Value
 
 

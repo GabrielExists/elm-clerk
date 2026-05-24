@@ -4,7 +4,7 @@ import Array exposing (Array)
 import Elm.Syntax.Expression as Expression exposing (Expression)
 import Elm.Syntax.Node as Node exposing (Node)
 import FastDict as Dict
-import Types exposing (Env, EvalErrorData, EvalErrorKind(..), Value(..))
+import IntTypes exposing (Env, EvalErrorData, EvalErrorKind(..), Value(..))
 
 
 typeError : Env -> String -> EvalErrorData

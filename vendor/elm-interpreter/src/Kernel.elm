@@ -22,7 +22,7 @@ import Kernel.JsArray
 import Kernel.String
 import Kernel.Utils
 import Maybe.Extra
-import Types exposing (Eval, EvalErrorData, EvalResult, Value(..))
+import IntTypes exposing (Eval, EvalErrorData, EvalResult, Value(..))
 import Value exposing (typeError)
 
 

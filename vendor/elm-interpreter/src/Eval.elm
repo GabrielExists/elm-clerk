@@ -3,7 +3,7 @@ module Eval exposing (eval, indent, toModule, trace)
 import Elm.Syntax.Expression as Expression exposing (Expression)
 import Eval.Module
 import Rope exposing (Rope)
-import Types exposing (CallTree, Error, Value)
+import IntTypes exposing (CallTree, Error, Value)
 
 
 eval : String -> Result Error Value

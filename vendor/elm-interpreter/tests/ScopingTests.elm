@@ -5,7 +5,7 @@ import Eval.Module
 import Expect
 import Test exposing (Test, describe, test)
 import TestUtils exposing (list)
-import Types exposing (Value(..))
+import IntTypes exposing (Value(..))
 
 
 suite : Test

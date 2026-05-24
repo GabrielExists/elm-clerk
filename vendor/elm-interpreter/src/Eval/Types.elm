@@ -8,7 +8,7 @@ import Recursion exposing (Rec)
 import Recursion.Traverse
 import Rope
 import Syntax
-import Types exposing (Config, Env, Error(..), Eval, EvalErrorData, EvalErrorKind(..), EvalResult, PartialResult)
+import IntTypes exposing (Config, Env, Error(..), Eval, EvalErrorData, EvalErrorKind(..), EvalResult, PartialResult)
 
 
 combineMap : (a -> Eval b) -> List a -> Eval (List b)

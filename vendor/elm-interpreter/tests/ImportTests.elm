@@ -5,7 +5,7 @@ import Eval.Module
 import Expect
 import Test exposing (Test, describe, test)
 import TestUtils exposing (list)
-import Types exposing (Value(..))
+import IntTypes exposing (Value(..))
 
 
 suite : Test
@@ -278,7 +278,7 @@ type Color = Red | Green | Blue
 """
                     , """module Main exposing (main)
 
-import Types exposing (Color(..))
+import IntTypes exposing (Color(..))
 
 main =
     case Red of
@@ -298,7 +298,7 @@ type Shape = Circle Float | Rect Float Float
 """
                     , """module Main exposing (main)
 
-import Types exposing (Shape(..))
+import IntTypes exposing (Shape(..))
 
 main =
     case Circle 5.0 of
@@ -317,7 +317,7 @@ type Shape = Circle Float | Rect Float Float
 """
                     , """module Main exposing (main)
 
-import Types exposing (Shape(..))
+import IntTypes exposing (Shape(..))
 
 main =
     case Rect 3.0 4.0 of
@@ -336,7 +336,7 @@ type Color = Red | Green | Blue
 """
                     , """module Main exposing (main)
 
-import Types
+import IntTypes
 
 main =
     case Types.Red of

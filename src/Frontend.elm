@@ -4,11 +4,12 @@ import Browser exposing (UrlRequest(..))
 import Browser.Navigation as Nav
 import Html
 import Html.Attributes as Attr
-import Lamdera
+import Lamdera exposing (sendToBackend)
 import Types exposing (..)
 import Url
-import Page1
 import Http
+import Eval
+import Value
 
 
 type alias Model =
@@ -30,11 +31,12 @@ app =
 init : Url.Url -> Nav.Key -> ( Model, Cmd FrontendMsg )
 init url key =
     ( { key = key
-      , message = "Welcome to Lamdera! You're looking at the auto-generated base implementation. Check out src/Frontend.elm to start coding! " ++ String.fromInt Page1.a
-      , text = "Starting..."
+      , message = "Welcome to Lamdera! Yo're looking at the auto-generated base implementation. Check out src/Frontend.elm to start coding! "
+      , source = Nothing
+      , output = Nothing
       }
       , Http.get {
-         url = "/_x/read/src/Page1.elm"
+         url = "/_x/read/pages/Page1.elm"
          , expect = Http.expectString GotText
         }
     )
@@ -64,10 +66,12 @@ update msg model =
         GotText result ->
             case result of
                 Ok fullText ->
-                    ({model | text = fullText}, Cmd.none)
+                    let output = (Eval.eval fullText)
+                    in
+                    ({model | source = Just fullText, output = Just output}, sendToBackend (OutputToBackend fullText output))
 
                 Err error ->
-                    ({model | text = "Error"}, Cmd.none)
+                    (model, Cmd.none)
 
 
 updateFromBackend : ToFrontend -> Model -> ( Model, Cmd FrontendMsg )
@@ -92,7 +96,21 @@ view model =
                 [ Attr.style "font-family" "sans-serif"
                 , Attr.style "padding-top" "40px"
                 ]
-                [ Html.text model.text ]
+                [ Html.text (case model.output of
+                    Just output ->
+                        (case output of
+                            Ok value -> Value.toString value
+                            Err err -> "Error")
+                    Nothing -> "Not yet run"
+                    )]
+
+            , Html.div
+                [ Attr.style "font-family" "sans-serif"
+                , Attr.style "padding-top" "40px"
+                ]
+                [ Html.text (case model.source of
+                    Just source -> source
+                    Nothing -> "")]
             ]
         ]
     }

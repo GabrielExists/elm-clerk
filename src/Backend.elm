@@ -19,7 +19,9 @@ app =
 
 init : ( Model, Cmd BackendMsg )
 init =
-    ( { message = "Hello!" }
+    ( { message = "Hello!"
+      , source = Nothing
+      , output = Nothing }
     , Cmd.none
     )
 
@@ -36,3 +38,5 @@ updateFromFrontend sessionId clientId msg model =
     case msg of
         NoOpToBackend ->
             ( model, Cmd.none )
+        OutputToBackend source output ->
+            ( { model | source = Just source, output = Just output }, Cmd.none )

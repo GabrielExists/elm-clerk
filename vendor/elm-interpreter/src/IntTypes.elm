@@ -1,4 +1,4 @@
-module Types exposing (CallTree(..), Config, Env, EnvValues, Error(..), Eval, EvalErrorData, EvalErrorKind(..), EvalResult, ImportedNames, PartialEval, PartialResult, Value(..), emptyImports)
+module IntTypes exposing (CallTree(..), Config, Env, EnvValues, Error(..), Eval, EvalErrorData, EvalErrorKind(..), EvalResult, ImportedNames, PartialEval, PartialResult, Value(..), emptyImports)
 
 import Array exposing (Array)
 import Elm.Syntax.Expression exposing (Expression, FunctionImplementation)

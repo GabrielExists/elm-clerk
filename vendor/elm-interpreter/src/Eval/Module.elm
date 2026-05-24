@@ -22,7 +22,7 @@ import FastDict as Dict exposing (Dict)
 import List.Extra
 import Result.Extra
 import Rope exposing (Rope)
-import Types exposing (CallTree, Env, Error(..), ImportedNames, Value)
+import IntTypes exposing (CallTree, Env, Error(..), ImportedNames, Value)
 import Value exposing (unsupported)
 
 
@@ -87,7 +87,7 @@ traceOrEvalModule cfg source expression =
                         { trace = cfg.trace }
                         env
             in
-            ( Result.mapError Types.EvalError result
+            ( Result.mapError IntTypes.EvalError result
             , callTrees
             , logLines
             )
@@ -107,7 +107,7 @@ buildInitialEnv file =
         imports : ImportedNames
         imports =
             (defaultImports ++ file.imports)
-                |> List.foldl (processImport coreInterfaces) Types.emptyImports
+                |> List.foldl (processImport coreInterfaces) IntTypes.emptyImports
 
         coreEnv : Env
         coreEnv =
@@ -137,7 +137,7 @@ buildInitialEnv file =
 
                 Destructuring _ _ ->
                     -- This doesn't happen in valid Elm modules
-                    Err <| Types.EvalError <| unsupported env "Top level destructuring"
+                    Err <| IntTypes.EvalError <| unsupported env "Top level destructuring"
 
                 AliasDeclaration alias_ ->
                     Ok (registerRecordAliasConstructor moduleName alias_ env)
@@ -369,7 +369,7 @@ evalProject sources expression =
                             , callStack = []
                             , functions = Core.functions
                             , values = Dict.empty
-                            , imports = Types.emptyImports
+                            , imports = IntTypes.emptyImports
                             , moduleImports = Dict.empty
                             }
             in
@@ -401,10 +401,10 @@ evalProject sources expression =
                             case lastFile of
                                 Just file ->
                                     (defaultImports ++ file.imports)
-                                        |> List.foldl (processImport allInterfaces) Types.emptyImports
+                                        |> List.foldl (processImport allInterfaces) IntTypes.emptyImports
 
                                 Nothing ->
-                                    Types.emptyImports
+                                    IntTypes.emptyImports
 
                         finalEnv : Env
                         finalEnv =
@@ -419,7 +419,7 @@ evalProject sources expression =
                                 { trace = False }
                                 finalEnv
                     in
-                    Result.mapError Types.EvalError result
+                    Result.mapError IntTypes.EvalError result
 
 
 buildModuleEnv :
@@ -437,7 +437,7 @@ buildModuleEnv allInterfaces { file, moduleName } env =
         moduleImportedNames : ImportedNames
         moduleImportedNames =
             (defaultImports ++ file.imports)
-                |> List.foldl (processImport allInterfaces) Types.emptyImports
+                |> List.foldl (processImport allInterfaces) IntTypes.emptyImports
 
         envWithModuleImports : Env
         envWithModuleImports =
@@ -463,13 +463,13 @@ buildModuleEnv allInterfaces { file, moduleName } env =
                     Ok (registerConstructors moduleName customType envAcc)
 
                 PortDeclaration _ ->
-                    Err <| Types.EvalError <| unsupported envAcc "Port declaration"
+                    Err <| IntTypes.EvalError <| unsupported envAcc "Port declaration"
 
                 InfixDeclaration _ ->
-                    Err <| Types.EvalError <| unsupported envAcc "Infix declaration"
+                    Err <| IntTypes.EvalError <| unsupported envAcc "Infix declaration"
 
                 Destructuring _ _ ->
-                    Err <| Types.EvalError <| unsupported envAcc "Top level destructuring"
+                    Err <| IntTypes.EvalError <| unsupported envAcc "Top level destructuring"
 
                 AliasDeclaration alias_ ->
                     Ok (registerRecordAliasConstructor moduleName alias_ envAcc)

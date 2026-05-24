@@ -22,7 +22,7 @@ import Html
 import Json.Encode
 import List.Extra
 import Rope
-import Types exposing (CallTree(..), Error(..), Value)
+import IntTypes exposing (CallTree(..), Error(..), Value)
 import UI.Source as Source
 import UI.Theme as Theme
 import Value

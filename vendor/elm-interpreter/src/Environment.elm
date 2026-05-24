@@ -4,7 +4,7 @@ import Elm.Syntax.Expression exposing (FunctionImplementation)
 import Elm.Syntax.ModuleName exposing (ModuleName)
 import Elm.Syntax.Node as Node
 import FastDict as Dict
-import Types exposing (Env, EnvValues, Value)
+import IntTypes exposing (Env, EnvValues, Value)
 
 
 addValue : String -> Value -> Env -> Env
@@ -55,7 +55,7 @@ empty moduleName =
     , callStack = []
     , functions = Dict.empty
     , values = Dict.empty
-    , imports = Types.emptyImports
+    , imports = IntTypes.emptyImports
     , moduleImports = Dict.empty
     }
 

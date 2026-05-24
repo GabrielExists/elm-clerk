@@ -1,7 +1,7 @@
 module EvalResult exposing (andThen, combine, fail, foldl, fromResult, map, map2, onValue, succeed, toResult)
 
 import Rope exposing (Rope)
-import Types exposing (CallTree, EvalErrorData, EvalResult)
+import IntTypes exposing (CallTree, EvalErrorData, EvalResult)
 
 
 succeed : a -> EvalResult a
