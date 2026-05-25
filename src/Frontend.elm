@@ -106,49 +106,46 @@ view model =
     { title = ""
     , body =
         [ Html.div [ Attr.style "text-align" "center", Attr.style "padding-top" "40px" ]
-            [ Html.img [ Attr.src "https://lamdera.app/lamdera-logo-black.png", Attr.width 150 ] []
-            , Html.div
+            ([ Html.img [ Attr.src "https://lamdera.app/lamdera-logo-black.png", Attr.width 150 ] []
+             , Html.div
                 [ Attr.style "font-family" "sans-serif"
                 , Attr.style "padding-top" "40px"
                 ]
                 [ Html.text model.message ]
-            , Html.div
-                [ Attr.style "font-family" "sans-serif"
-                , Attr.style "padding-top" "40px"
-                ]
-                [ Element.layout []
-                    (Source.view []
-                        { highlight = Nothing
-                        , buttons = []
-                        , source =
-                            case List.head model.sources of
-                                Just source ->
-                                    source
-
-                                Nothing ->
-                                    ""
-                        }
-                    )
-                ]
-            , Html.div
-                [ Attr.style "font-family" "monospace"
-                , Attr.style "font-size" "40px"
-                , Attr.style "padding-top" "40px"
-                ]
-                [ Html.text
-                    (case List.head model.outputs of
-                        Just output ->
-                            case output of
-                                Ok value ->
-                                    Value.toString value
-
-                                Err err ->
-                                    "Error"
-
-                        Nothing ->
-                            "Not yet run"
-                    )
-                ]
-            ]
+             ]
+                ++ List.map2 viewSection model.sources model.outputs
+            )
         ]
     }
+
+
+viewSection : String -> Output -> Html.Html FrontendMsg
+viewSection source output =
+    Html.div []
+        [ Html.div
+            [ Attr.style "font-family" "sans-serif"
+            , Attr.style "padding-top" "40px"
+            ]
+            [ Element.layout []
+                (Source.view []
+                    { highlight = Nothing
+                    , buttons = []
+                    , source = source
+                    }
+                )
+            ]
+        , Html.div
+            [ Attr.style "font-family" "monospace"
+            , Attr.style "font-size" "40px"
+            , Attr.style "padding-top" "40px"
+            ]
+            [ Html.text
+                (case output of
+                    Ok value ->
+                        Value.toString value
+
+                    Err _ ->
+                        "Error"
+                )
+            ]
+        ]
