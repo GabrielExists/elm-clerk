@@ -2,13 +2,18 @@ module Frontend exposing (..)
 
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation as Nav
+import Element
+import Elm.Syntax.Expression
+import Eval
+import Eval.Expression as EEval
+import Eval.Module as MEval
 import Html
 import Html.Attributes as Attr
+import Http
 import Lamdera exposing (sendToBackend)
 import Types exposing (..)
+import UI.Source as Source
 import Url
-import Http
-import Eval
 import Value
 
 
@@ -35,9 +40,9 @@ init url key =
       , source = Nothing
       , output = Nothing
       }
-      , Http.get {
-         url = "/_x/read/pages/Page1.elm"
-         , expect = Http.expectString GotText
+    , Http.get
+        { url = "/_x/read/pages/Page1.elm"
+        , expect = Http.expectString GotText
         }
     )
 
@@ -66,12 +71,20 @@ update msg model =
         GotText result ->
             case result of
                 Ok fullText ->
-                    let output = (Eval.eval fullText)
+                    let
+                        output =
+                            MEval.eval fullText
+                                (Elm.Syntax.Expression.FunctionOrValue
+                                    []
+                                    "output"
+                                )
                     in
-                    ({model | source = Just fullText, output = Just output}, sendToBackend (OutputToBackend fullText output))
+                    ( { model | source = Just fullText, output = Just output }
+                    , sendToBackend (OutputToBackend fullText output)
+                    )
 
                 Err error ->
-                    (model, Cmd.none)
+                    ( model, Cmd.none )
 
 
 updateFromBackend : ToFrontend -> Model -> ( Model, Cmd FrontendMsg )
@@ -96,21 +109,38 @@ view model =
                 [ Attr.style "font-family" "sans-serif"
                 , Attr.style "padding-top" "40px"
                 ]
-                [ Html.text (case model.output of
-                    Just output ->
-                        (case output of
-                            Ok value -> Value.toString value
-                            Err err -> "Error")
-                    Nothing -> "Not yet run"
-                    )]
+                [ Html.text
+                    (case model.output of
+                        Just output ->
+                            case output of
+                                Ok value ->
+                                    Value.toString value
 
+                                Err err ->
+                                    "Error"
+
+                        Nothing ->
+                            "Not yet run"
+                    )
+                ]
             , Html.div
                 [ Attr.style "font-family" "sans-serif"
                 , Attr.style "padding-top" "40px"
                 ]
-                [ Html.text (case model.source of
-                    Just source -> source
-                    Nothing -> "")]
+                [ Element.layout []
+                    (Source.view []
+                        { highlight = Nothing
+                        , buttons = []
+                        , source =
+                            case model.source of
+                                Just source ->
+                                    source
+
+                                Nothing ->
+                                    ""
+                        }
+                    )
+                ]
             ]
         ]
     }
