@@ -1,4 +1,4 @@
-module Eval.Module exposing (eval, evalProject, trace, traceOrEvalModule)
+module Eval.Module exposing (buildInitialEnv, eval, evalProject, trace, traceOrEvalModule)
 
 import Core
 import Elm.Interface exposing (Exposed)
@@ -19,10 +19,10 @@ import Elm.Syntax.TypeAnnotation exposing (TypeAnnotation(..))
 import Environment
 import Eval.Expression
 import FastDict as Dict exposing (Dict)
+import IntTypes exposing (CallTree, Env, Error(..), ImportedNames, Value)
 import List.Extra
 import Result.Extra
 import Rope exposing (Rope)
-import IntTypes exposing (CallTree, Env, Error(..), ImportedNames, Value)
 import Value exposing (unsupported)
 
 

@@ -2,19 +2,25 @@ module Frontend exposing (..)
 
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation as Nav
+import Dict exposing (Dict)
 import Element
+import Elm.Interface exposing (Exposed)
 import Elm.Parser
-import Elm.Syntax.Expression
+import Elm.Syntax.Expression exposing (Expression(..))
 import Elm.Syntax.File exposing (File)
+import Elm.Syntax.ModuleName exposing (ModuleName)
+import Elm.Syntax.Node as Node exposing (Node(..))
 import Eval
-import Eval.Expression as EEval
-import Eval.Module as MEval
+import Eval.Expression
+import Eval.Module
 import Html
 import Html.Attributes as Attr
 import Http
-import IntTypes exposing (Error, Value)
+import IntTypes exposing (CallTree, Env, Error(..), Value)
 import Lamdera exposing (sendToBackend)
+import List.Extra
 import Parser exposing (DeadEnd)
+import Rope exposing (Rope)
 import Types exposing (..)
 import UI.Source as Source
 import Url
@@ -80,8 +86,9 @@ update msg model =
                         sources =
                             [ fullText, fullText ]
 
+                        module_run : String -> Result Error Value
                         module_run source =
-                            MEval.eval source
+                            Eval.Module.eval source
                                 (Elm.Syntax.Expression.FunctionOrValue
                                     []
                                     "output"
@@ -176,7 +183,74 @@ deadEndsToString deadEnds =
 
 runCustom : String -> List String
 runCustom source =
-    [ "OUTPUT", "TWO" ]
+    let
+        expression_name : String
+        expression_name =
+            "output"
+
+        expression : Expression
+        expression =
+            Elm.Syntax.Expression.FunctionOrValue
+                []
+                expression_name
+
+        file : Result (List DeadEnd) File
+        file =
+            Elm.Parser.parseToFile source
+
+        fileMappedError : Result Error File
+        fileMappedError =
+            Result.mapError ParsingError file
+
+        maybeEnv : Result Error Env
+        maybeEnv =
+            Result.andThen Eval.Module.buildInitialEnv fileMappedError
+
+        expressionNode : Node Expression
+        expressionNode =
+            let
+                expressionIndex : Maybe Int
+                expressionIndex =
+                    source
+                        |> String.split "\n"
+                        |> List.Extra.findIndex
+                            (String.startsWith (expression_name ++ " ="))
+
+                node : Node Expression
+                node =
+                    case expressionIndex of
+                        Just index ->
+                            Node
+                                { start = { row = index + 1, column = 1 }
+                                , end = { row = index + 1, column = 1 + String.length expression_name }
+                                }
+                                expression
+
+                        Nothing ->
+                            Node.empty expression
+            in
+            node
+
+        module_run : Result Error Value
+        module_run =
+            case maybeEnv of
+                Err e ->
+                    Err e
+
+                Ok env ->
+                    let
+                        ( result, _, _ ) =
+                            Eval.Expression.evalExpression
+                                expressionNode
+                                { trace = False }
+                                env
+                    in
+                    Result.mapError IntTypes.EvalError result
+
+        module_run_output =
+            module_run_to_string module_run
+    in
+    [ module_run_output ]
 
 
 view : Model -> Browser.Document FrontendMsg
