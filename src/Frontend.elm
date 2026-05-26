@@ -3,14 +3,18 @@ module Frontend exposing (..)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation as Nav
 import Element
+import Elm.Parser
 import Elm.Syntax.Expression
+import Elm.Syntax.File exposing (File)
 import Eval
 import Eval.Expression as EEval
 import Eval.Module as MEval
 import Html
 import Html.Attributes as Attr
 import Http
+import IntTypes exposing (Error, Value)
 import Lamdera exposing (sendToBackend)
+import Parser exposing (DeadEnd)
 import Types exposing (..)
 import UI.Source as Source
 import Url
@@ -72,19 +76,22 @@ update msg model =
             case result of
                 Ok fullText ->
                     let
+                        sources : Sources
                         sources =
-                            String.split "\n\n" fullText
+                            [ fullText, fullText ]
 
+                        module_run source =
+                            MEval.eval source
+                                (Elm.Syntax.Expression.FunctionOrValue
+                                    []
+                                    "output"
+                                )
+
+                        outputs : Outputs
                         outputs =
-                            sources
-                                |> List.map
-                                    (\string ->
-                                        MEval.eval string
-                                            (Elm.Syntax.Expression.FunctionOrValue
-                                                []
-                                                "output"
-                                            )
-                                    )
+                            [ [ module_run fullText |> module_run_to_string ]
+                            , runCustom fullText
+                            ]
                     in
                     ( { model | sources = sources, outputs = outputs }
                     , sendToBackend (OutputToBackend sources outputs)
@@ -99,6 +106,77 @@ updateFromBackend msg model =
     case msg of
         NoOpToFrontend ->
             ( model, Cmd.none )
+
+
+parse : String -> List String
+parse source =
+    case Elm.Parser.parseToFile source of
+        Ok file ->
+            [ "Ok" ]
+
+        Err deadEnds ->
+            deadEndsToString deadEnds
+
+
+deadEndsToString : List DeadEnd -> List String
+deadEndsToString deadEnds =
+    deadEnds
+        |> List.map
+            (\deadEnd ->
+                "At row "
+                    ++ String.fromInt deadEnd.row
+                    ++ ", column "
+                    ++ String.fromInt deadEnd.col
+                    ++ ", problem : "
+                    ++ (case deadEnd.problem of
+                            Parser.Expecting string ->
+                                "Expecting " ++ string
+
+                            Parser.ExpectingInt ->
+                                "Expecting Int"
+
+                            Parser.ExpectingHex ->
+                                "Expecting hex"
+
+                            Parser.ExpectingOctal ->
+                                "Expecting Octal"
+
+                            Parser.ExpectingBinary ->
+                                "Expecting Binary"
+
+                            Parser.ExpectingFloat ->
+                                "Expecting Float"
+
+                            Parser.ExpectingNumber ->
+                                "Expecting Number"
+
+                            Parser.ExpectingVariable ->
+                                "Expecting Variable"
+
+                            Parser.ExpectingSymbol string ->
+                                "Expecting symbol " ++ string
+
+                            Parser.ExpectingKeyword string ->
+                                "Expecting keyword " ++ string
+
+                            Parser.ExpectingEnd ->
+                                "Expecting end"
+
+                            Parser.UnexpectedChar ->
+                                "Unexpected char"
+
+                            Parser.Problem string ->
+                                "Problem: " ++ string
+
+                            Parser.BadRepeat ->
+                                "BadRepeat"
+                       )
+            )
+
+
+runCustom : String -> List String
+runCustom source =
+    [ "OUTPUT", "TWO" ]
 
 
 view : Model -> Browser.Document FrontendMsg
@@ -119,10 +197,10 @@ view model =
     }
 
 
-viewSection : String -> Output -> Html.Html FrontendMsg
+viewSection : String -> List String -> Html.Html FrontendMsg
 viewSection source output =
     Html.div []
-        [ Html.div
+        ([ Html.div
             [ Attr.style "font-family" "sans-serif"
             , Attr.style "padding-top" "40px"
             ]
@@ -134,18 +212,26 @@ viewSection source output =
                     }
                 )
             ]
-        , Html.div
-            [ Attr.style "font-family" "monospace"
-            , Attr.style "font-size" "40px"
-            , Attr.style "padding-top" "40px"
-            ]
-            [ Html.text
-                (case output of
-                    Ok value ->
-                        Value.toString value
+         ]
+            ++ List.map viewOutput output
+        )
 
-                    Err _ ->
-                        "Error"
-                )
-            ]
+
+viewOutput : String -> Html.Html msg
+viewOutput output =
+    Html.div
+        [ Attr.style "font-family" "monospace"
+        , Attr.style "font-size" "40px"
+        , Attr.style "padding-top" "40px"
         ]
+        [ Html.text output ]
+
+
+module_run_to_string : Result Error Value -> String
+module_run_to_string output =
+    case output of
+        Ok value ->
+            Value.toString value
+
+        Err _ ->
+            "Error"
