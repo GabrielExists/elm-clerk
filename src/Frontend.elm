@@ -6,6 +6,7 @@ import Dict exposing (Dict)
 import Element
 import Elm.Interface exposing (Exposed)
 import Elm.Parser
+import Elm.Syntax.Declaration exposing (Declaration(..))
 import Elm.Syntax.Expression exposing (Expression(..))
 import Elm.Syntax.File exposing (File)
 import Elm.Syntax.ModuleName exposing (ModuleName)
@@ -96,8 +97,8 @@ update msg model =
 
                         outputs : Outputs
                         outputs =
-                            [ [ module_run fullText |> module_run_to_string ]
-                            , runCustom fullText
+                            --[ [ module_run fullText |> module_run_to_string ]
+                            [ runCustom fullText
                             ]
                     in
                     ( { model | sources = sources, outputs = outputs }
@@ -184,20 +185,19 @@ deadEndsToString deadEnds =
 runCustom : String -> List String
 runCustom source =
     let
-        expression_name : String
-        expression_name =
-            "output"
-
-        expression : Expression
-        expression =
+        expression : String -> Expression
+        expression expressionName =
             Elm.Syntax.Expression.FunctionOrValue
                 []
-                expression_name
+                expressionName
 
         file : Result (List DeadEnd) File
         file =
             Elm.Parser.parseToFile source
 
+        --fileResult : Result (List DeadEnd) File
+        --fileResult =
+        --    ParserFast.run Elm.Parser.File.file source
         fileMappedError : Result Error File
         fileMappedError =
             Result.mapError ParsingError file
@@ -206,15 +206,56 @@ runCustom source =
         maybeEnv =
             Result.andThen Eval.Module.buildInitialEnv fileMappedError
 
-        expressionNode : Node Expression
-        expressionNode =
+        declarations : List String
+        declarations =
+            case fileMappedError of
+                Ok fileLocal ->
+                    fileLocal.declarations
+                        |> List.map
+                            (\node ->
+                                let
+                                    (Node range declaration) =
+                                        node
+                                in
+                                case declaration of
+                                    FunctionDeclaration function ->
+                                        let
+                                            (Node _ impl) =
+                                                function.declaration
+
+                                            (Node _ name) =
+                                                impl.name
+                                        in
+                                        name
+
+                                    AliasDeclaration typeAlias ->
+                                        "typealias"
+
+                                    CustomTypeDeclaration type_ ->
+                                        "customtype"
+
+                                    PortDeclaration signature ->
+                                        "portdeclaration"
+
+                                    InfixDeclaration infix_ ->
+                                        "infixdeclaration"
+
+                                    Destructuring node1 node2 ->
+                                        "destructuring"
+                            )
+
+                Err _ ->
+                    []
+
+        expressionNode : String -> Node Expression
+        expressionNode expressionName =
             let
                 expressionIndex : Maybe Int
                 expressionIndex =
                     source
                         |> String.split "\n"
                         |> List.Extra.findIndex
-                            (String.startsWith (expression_name ++ " ="))
+                            (String.startsWith (expressionName ++ " ="))
 
                 node : Node Expression
                 node =
@@ -222,17 +263,17 @@ runCustom source =
                         Just index ->
                             Node
                                 { start = { row = index + 1, column = 1 }
-                                , end = { row = index + 1, column = 1 + String.length expression_name }
+                                , end = { row = index + 1, column = 1 + String.length expressionName }
                                 }
-                                expression
+                                (expression expressionName)
 
                         Nothing ->
-                            Node.empty expression
+                            Node.empty (expression expressionName)
             in
             node
 
-        module_run : Result Error Value
-        module_run =
+        module_run : String -> Result Error Value
+        module_run expressionName =
             case maybeEnv of
                 Err e ->
                     Err e
@@ -241,16 +282,19 @@ runCustom source =
                     let
                         ( result, _, _ ) =
                             Eval.Expression.evalExpression
-                                expressionNode
+                                (expressionNode expressionName)
                                 { trace = False }
                                 env
                     in
                     Result.mapError IntTypes.EvalError result
 
-        module_run_output =
-            module_run_to_string module_run
+        --module_run_output =
+        --    module_run_to_string (module_run "output")
+        evaluations : List String
+        evaluations =
+            declarations |> List.map (\name -> name ++ " = " ++ module_run_to_string (module_run name))
     in
-    [ module_run_output ]
+    evaluations
 
 
 view : Model -> Browser.Document FrontendMsg
