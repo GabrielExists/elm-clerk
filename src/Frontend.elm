@@ -8,7 +8,7 @@ import Elm.Interface exposing (Exposed)
 import Elm.Parser
 import Elm.Syntax.Declaration exposing (Declaration(..))
 import Elm.Syntax.Expression exposing (Expression(..))
-import Elm.Syntax.File exposing (File)
+import Elm.Syntax.File as File exposing (File)
 import Elm.Syntax.ModuleName exposing (ModuleName)
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Eval
@@ -18,6 +18,7 @@ import Html
 import Html.Attributes as Attr
 import Http
 import IntTypes exposing (CallTree, Env, Error(..), Value)
+import Json.Encode as Json
 import Lamdera exposing (sendToBackend)
 import List.Extra
 import Parser exposing (DeadEnd)
@@ -99,6 +100,7 @@ update msg model =
                         outputs =
                             --[ [ module_run fullText |> module_run_to_string ]
                             [ runCustom fullText
+                            , runCustomParse fullText
                             ]
                     in
                     ( { model | sources = sources, outputs = outputs }
@@ -180,6 +182,18 @@ deadEndsToString deadEnds =
                                 "BadRepeat"
                        )
             )
+
+
+runCustomParse : String -> List String
+runCustomParse source =
+    case Elm.Parser.parseToFile source of
+        Ok file ->
+            File.encode file
+                |> Json.encode 2
+                |> List.singleton
+
+        Err error ->
+            deadEndsToString error
 
 
 runCustom : String -> List String
@@ -301,13 +315,15 @@ view : Model -> Browser.Document FrontendMsg
 view model =
     { title = ""
     , body =
-        [ Html.div [ Attr.style "text-align" "center", Attr.style "padding-top" "40px" ]
-            ([ Html.img [ Attr.src "https://lamdera.app/lamdera-logo-black.png", Attr.width 150 ] []
-             , Html.div
-                [ Attr.style "font-family" "sans-serif"
-                , Attr.style "padding-top" "40px"
+        [ Html.div [ Attr.style "text-align" "left", Attr.style "padding-top" "40px", Attr.style "padding-left" "185px", Attr.style "padding-right" "40px" ]
+            ([ Html.div [ Attr.style "text-align" "center" ]
+                [ Html.img [ Attr.src "https://lamdera.app/lamdera-logo-black.png", Attr.width 150 ] []
+                , Html.div
+                    [ Attr.style "font-family" "sans-serif"
+                    , Attr.style "padding-top" "40px"
+                    ]
+                    [ Html.text model.message ]
                 ]
-                [ Html.text model.message ]
              ]
                 ++ List.map2 viewSection model.sources model.outputs
             )
@@ -340,9 +356,11 @@ viewOutput output =
     Html.div
         [ Attr.style "font-family" "monospace"
         , Attr.style "font-size" "40px"
-        , Attr.style "padding-top" "40px"
         ]
-        [ Html.text output ]
+        [ Html.pre []
+            [ Html.text output
+            ]
+        ]
 
 
 module_run_to_string : Result Error Value -> String
