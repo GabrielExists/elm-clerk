@@ -6,6 +6,9 @@ import Dict exposing (Dict)
 import Element
 import Elm.Interface exposing (Exposed)
 import Elm.Parser
+import Elm.Parser.Comments
+import Elm.Parser.Declarations
+import Elm.Parser.File
 import Elm.Syntax.Declaration exposing (Declaration(..))
 import Elm.Syntax.Expression exposing (Expression(..))
 import Elm.Syntax.File as File exposing (File)
@@ -22,6 +25,8 @@ import Json.Encode as Json
 import Lamdera exposing (sendToBackend)
 import List.Extra
 import Parser exposing (DeadEnd)
+import ParserFast
+import ParserWithComments exposing (WithComments)
 import Rope exposing (Rope)
 import Types exposing (..)
 import UI.Source as Source
@@ -198,16 +203,85 @@ deadEndsToString deadEnds =
             )
 
 
-runCustomParse : String -> List String
-runCustomParse source =
-    case Elm.Parser.parseToFile source of
-        Ok file ->
-            File.encode file
-                |> Json.encode 2
-                |> List.singleton
+type Cell
+    = CellComment (Node String)
+    | CellDeclaration (Node Declaration)
 
-        Err error ->
-            deadEndsToString error
+
+runCustomParse : String -> List String
+runCustomParse fullSource =
+    let
+        sources : List String
+        sources =
+            String.split "\n\n" fullSource
+
+        --parser : ParserFast.Parser (WithComments (Node Declaration))
+        --parser =
+        --    Elm.Parser.Declarations.declaration
+        --parser : ParserFast.Parser (WithComments (Node Declaration))
+        --parser =
+        parser : ParserFast.Parser Cell
+        parser =
+            ParserFast.oneOf2
+                (ParserFast.map (\x -> CellDeclaration x.syntax) Elm.Parser.Declarations.declaration)
+                (ParserFast.map CellComment Elm.Parser.Comments.singleLineComment)
+
+        outputs : List (Result (List DeadEnd) Cell)
+        outputs =
+            sources
+                |> List.map (ParserFast.run parser)
+
+        handleOutput : Result (List DeadEnd) Cell -> String
+        handleOutput result =
+            case result of
+                Ok cell ->
+                    case cell of
+                        CellComment (Node _ string) ->
+                            let
+                                contents =
+                                    String.dropLeft 2 string
+                            in
+                            if String.startsWith " " contents then
+                                String.dropLeft 1 contents
+
+                            else
+                                contents
+
+                        CellDeclaration (Node _ declaration) ->
+                            Elm.Syntax.Declaration.encode declaration
+                                |> Json.encode 2
+
+                Err err ->
+                    deadEndsToString err
+                        |> String.join "\n"
+
+        pairs : List ( String, Result (List DeadEnd) Cell )
+        pairs =
+            List.map2 Tuple.pair sources outputs
+
+        combined : List String
+        combined =
+            List.concatMap
+                (\( source, output ) -> [ source, handleOutput output ])
+                pairs
+
+        --|> List.concatMap
+        --    (\source output -> [ source, handleOutput output ])
+    in
+    combined
+
+
+
+--runCustomParse : String -> List String
+--runCustomParse source =
+--case ParserFast.run Elm.Parser.File.file source of
+--    Ok file ->
+--        File.encode file
+--            |> Json.encode 2
+--            |> List.singleton
+--
+--    Err error ->
+--        deadEndsToString error
 
 
 runCustom : String -> List String
