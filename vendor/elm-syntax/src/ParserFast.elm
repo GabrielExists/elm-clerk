@@ -123,7 +123,7 @@ Once a path is chosen, it does not come back and try the others.
 
 -}
 
-import Char.Extra
+import Char.SynExtra
 import Elm.Syntax.Range exposing (Location, Range)
 import Parser
 
@@ -2446,7 +2446,7 @@ keyword kwd res =
 
 isSubCharAlphaNumOrUnderscore : Int -> String -> Bool
 isSubCharAlphaNumOrUnderscore offset string =
-    String.any Char.Extra.isLatinAlphaNumOrUnderscoreFast
+    String.any Char.SynExtra.isLatinAlphaNumOrUnderscoreFast
         (String.slice offset (offset + 1) string)
 
 
@@ -2549,7 +2549,7 @@ charOrEnd offset string =
 
 charStringIsUtf16HighSurrogate : String -> Bool
 charStringIsUtf16HighSurrogate charString =
-    charString |> String.any Char.Extra.isUtf16Surrogate
+    charString |> String.any Char.SynExtra.isUtf16Surrogate
 
 
 whileMapWithRange : (Char -> Bool) -> (Range -> String -> res) -> Parser res
@@ -3039,7 +3039,7 @@ nestableMultiCommentMapWithRange rangeContentToRes ( openChar, openTail ) ( clos
                 charCode =
                     Char.toCode char
             in
-            charCode /= openCharCode && charCode /= closeCharCode && not (Char.Extra.isUtf16Surrogate char)
+            charCode /= openCharCode && charCode /= closeCharCode && not (Char.SynExtra.isUtf16Surrogate char)
     in
     map2WithRange
         (\range afterOpen contentAfterAfterOpen ->

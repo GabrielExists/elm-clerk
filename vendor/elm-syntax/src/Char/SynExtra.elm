@@ -1,4 +1,4 @@
-module Char.Extra exposing (isLatinAlphaNumOrUnderscoreFast, isUtf16Surrogate, unicodeIsAlphaNumOrUnderscoreFast, unicodeIsLowerFast, unicodeIsUpperFast)
+module Char.SynExtra exposing (isLatinAlphaNumOrUnderscoreFast, isUtf16Surrogate, unicodeIsAlphaNumOrUnderscoreFast, unicodeIsLowerFast, unicodeIsUpperFast)
 
 {-| Edited from [minibill/elm-unicode](https://package.elm-lang.org/packages/miniBill/elm-unicode/latest/)
 

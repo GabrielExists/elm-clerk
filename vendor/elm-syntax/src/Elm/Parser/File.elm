@@ -10,7 +10,7 @@ import Elm.Syntax.File exposing (File)
 import Elm.Syntax.Node exposing (Node)
 import ParserFast exposing (Parser)
 import ParserWithComments exposing (WithComments)
-import Rope
+import SynRope
 
 
 file : ParserFast.Parser File
@@ -22,10 +22,10 @@ file =
             , declarations = declarations.syntax
             , comments =
                 moduleDefinition.comments
-                    |> Rope.prependTo moduleComments
-                    |> Rope.prependTo imports.comments
-                    |> Rope.prependTo declarations.comments
-                    |> Rope.toList
+                    |> SynRope.prependTo moduleComments
+                    |> SynRope.prependTo imports.comments
+                    |> SynRope.prependTo declarations.comments
+                    |> SynRope.toList
             }
         )
         (Layout.layoutStrictFollowedByWithComments
@@ -34,11 +34,11 @@ file =
         (Layout.layoutStrictFollowedByComments
             (ParserFast.map2OrSucceed
                 (\moduleDocumentation commentsAfter ->
-                    Rope.one moduleDocumentation |> Rope.filledPrependTo commentsAfter
+                    SynRope.one moduleDocumentation |> SynRope.filledPrependTo commentsAfter
                 )
                 Comments.moduleDocumentation
                 Layout.layoutStrict
-                Rope.empty
+                SynRope.empty
             )
         )
         (ParserWithComments.many importDefinition)
@@ -51,7 +51,7 @@ fileDeclarations =
         (Layout.moduleLevelIndentationFollowedBy
             (ParserFast.map2
                 (\declarationParsed commentsAfter ->
-                    { comments = declarationParsed.comments |> Rope.prependTo commentsAfter
+                    { comments = declarationParsed.comments |> SynRope.prependTo commentsAfter
                     , syntax = declarationParsed.syntax
                     }
                 )

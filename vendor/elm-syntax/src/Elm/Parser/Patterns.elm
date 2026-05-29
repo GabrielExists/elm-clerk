@@ -7,7 +7,7 @@ import Elm.Syntax.Pattern as Pattern exposing (Pattern(..), QualifiedNameRef)
 import Elm.Syntax.Range exposing (Range)
 import ParserFast exposing (Parser)
 import ParserWithComments exposing (WithComments)
-import Rope
+import SynRope
 
 
 type PatternComposedWith
@@ -27,8 +27,8 @@ composablePatternTryToCompose =
         (\x commentsAfterLeft maybeComposedWithResult ->
             { comments =
                 x.comments
-                    |> Rope.prependTo commentsAfterLeft
-                    |> Rope.prependTo maybeComposedWithResult.comments
+                    |> SynRope.prependTo commentsAfterLeft
+                    |> SynRope.prependTo maybeComposedWithResult.comments
             , syntax =
                 case maybeComposedWithResult.syntax of
                     PatternComposedWithNothing () ->
@@ -63,7 +63,7 @@ maybeComposedWith =
         (ParserFast.symbolFollowedBy "::"
             (ParserFast.map2
                 (\commentsAfterCons patternResult ->
-                    { comments = commentsAfterCons |> Rope.prependTo patternResult.comments
+                    { comments = commentsAfterCons |> SynRope.prependTo patternResult.comments
                     , syntax = PatternComposedWithCons patternResult.syntax
                     }
                 )
@@ -71,7 +71,7 @@ maybeComposedWith =
                 pattern
             )
         )
-        { comments = Rope.empty, syntax = PatternComposedWithNothing () }
+        { comments = SynRope.empty, syntax = PatternComposedWithNothing () }
 
 
 parensPattern : Parser (WithComments (Node Pattern))
@@ -81,7 +81,7 @@ parensPattern =
             (\range commentsBeforeHead contentResult ->
                 { comments =
                     commentsBeforeHead
-                        |> Rope.prependTo contentResult.comments
+                        |> SynRope.prependTo contentResult.comments
                 , syntax =
                     Node { start = { row = range.start.row, column = range.start.column - 1 }, end = range.end }
                         contentResult.syntax
@@ -90,13 +90,13 @@ parensPattern =
             Layout.maybeLayout
             -- yes, (  ) is a valid pattern but not a valid type or expression
             (ParserFast.oneOf2
-                (ParserFast.symbol ")" { comments = Rope.empty, syntax = UnitPattern })
+                (ParserFast.symbol ")" { comments = SynRope.empty, syntax = UnitPattern })
                 (ParserFast.map3
                     (\headResult commentsAfterHead tailResult ->
                         { comments =
                             headResult.comments
-                                |> Rope.prependTo commentsAfterHead
-                                |> Rope.prependTo tailResult.comments
+                                |> SynRope.prependTo commentsAfterHead
+                                |> SynRope.prependTo tailResult.comments
                         , syntax =
                             case tailResult.syntax of
                                 Nothing ->
@@ -114,15 +114,15 @@ parensPattern =
                     pattern
                     Layout.maybeLayout
                     (ParserFast.oneOf2
-                        (ParserFast.symbol ")" { comments = Rope.empty, syntax = Nothing })
+                        (ParserFast.symbol ")" { comments = SynRope.empty, syntax = Nothing })
                         (ParserFast.symbolFollowedBy ","
                             (ParserFast.map4
                                 (\commentsBefore secondPart commentsAfter maybeThirdPart ->
                                     { comments =
                                         commentsBefore
-                                            |> Rope.prependTo secondPart.comments
-                                            |> Rope.prependTo commentsAfter
-                                            |> Rope.prependTo maybeThirdPart.comments
+                                            |> SynRope.prependTo secondPart.comments
+                                            |> SynRope.prependTo commentsAfter
+                                            |> SynRope.prependTo maybeThirdPart.comments
                                     , syntax = Just { maybeThirdPart = maybeThirdPart.syntax, secondPart = secondPart.syntax }
                                     }
                                 )
@@ -130,14 +130,14 @@ parensPattern =
                                 pattern
                                 Layout.maybeLayout
                                 (ParserFast.oneOf2
-                                    (ParserFast.symbol ")" { comments = Rope.empty, syntax = Nothing })
+                                    (ParserFast.symbol ")" { comments = SynRope.empty, syntax = Nothing })
                                     (ParserFast.symbolFollowedBy ","
                                         (ParserFast.map3
                                             (\commentsBefore thirdPart commentsAfter ->
                                                 { comments =
                                                     commentsBefore
-                                                        |> Rope.prependTo thirdPart.comments
-                                                        |> Rope.prependTo commentsAfter
+                                                        |> SynRope.prependTo thirdPart.comments
+                                                        |> SynRope.prependTo commentsAfter
                                                 , syntax = Just thirdPart.syntax
                                                 }
                                             )
@@ -160,7 +160,7 @@ varPattern : Parser (WithComments (Node Pattern))
 varPattern =
     Tokens.functionNameMapWithRange
         (\range var ->
-            { comments = Rope.empty
+            { comments = SynRope.empty
             , syntax = Node range (VarPattern var)
             }
         )
@@ -169,15 +169,15 @@ varPattern =
 numberPart : Parser (WithComments (Node Pattern))
 numberPart =
     ParserFast.integerDecimalOrHexadecimalMapWithRange
-        (\range n -> { comments = Rope.empty, syntax = Node range (IntPattern n) })
-        (\range n -> { comments = Rope.empty, syntax = Node range (HexPattern n) })
+        (\range n -> { comments = SynRope.empty, syntax = Node range (IntPattern n) })
+        (\range n -> { comments = SynRope.empty, syntax = Node range (HexPattern n) })
 
 
 charPattern : Parser (WithComments (Node Pattern))
 charPattern =
     Tokens.characterLiteralMapWithRange
         (\range char ->
-            { comments = Rope.empty, syntax = Node range (CharPattern char) }
+            { comments = SynRope.empty, syntax = Node range (CharPattern char) }
         )
 
 
@@ -192,7 +192,7 @@ listPattern =
                     }
 
                 Just elements ->
-                    { comments = commentsBeforeElements |> Rope.prependTo elements.comments
+                    { comments = commentsBeforeElements |> SynRope.prependTo elements.comments
                     , syntax = Node range (ListPattern elements.syntax)
                     }
         )
@@ -204,8 +204,8 @@ listPattern =
                     Just
                         { comments =
                             head.comments
-                                |> Rope.prependTo tail.comments
-                                |> Rope.prependTo commentsAfterHead
+                                |> SynRope.prependTo tail.comments
+                                |> SynRope.prependTo commentsAfterHead
                         , syntax = head.syntax :: tail.syntax
                         }
                 )
@@ -258,7 +258,7 @@ allPattern : Parser (WithComments (Node Pattern))
 allPattern =
     ParserFast.symbolWithRange "_"
         (\range ->
-            { comments = Rope.empty
+            { comments = SynRope.empty
             , syntax = Node range AllPattern
             }
         )
@@ -268,7 +268,7 @@ stringPattern : Parser (WithComments (Node Pattern))
 stringPattern =
     Tokens.singleOrTripleQuotedStringLiteralMapWithRange
         (\range string ->
-            { comments = Rope.empty
+            { comments = SynRope.empty
             , syntax = Node range (StringPattern string)
             }
         )
@@ -304,7 +304,7 @@ qualifiedPatternWithConsumeArgs =
                         (Node lastArgRange _) :: _ ->
                             { start = nameRange.start, end = lastArgRange.end }
             in
-            { comments = afterStartName |> Rope.prependTo argsReverse.comments
+            { comments = afterStartName |> SynRope.prependTo argsReverse.comments
             , syntax =
                 Node range
                     (NamedPattern
@@ -319,7 +319,7 @@ qualifiedPatternWithConsumeArgs =
             (Layout.positivelyIndentedFollowedBy
                 (ParserFast.map2
                     (\arg commentsAfterArg ->
-                        { comments = arg.comments |> Rope.prependTo commentsAfterArg
+                        { comments = arg.comments |> SynRope.prependTo commentsAfterArg
                         , syntax = arg.syntax
                         }
                     )
@@ -351,7 +351,7 @@ qualifiedPatternWithoutConsumeArgs : Parser (WithComments (Node Pattern))
 qualifiedPatternWithoutConsumeArgs =
     ParserFast.map2WithRange
         (\range firstName after ->
-            { comments = Rope.empty
+            { comments = SynRope.empty
             , syntax =
                 Node range
                     (NamedPattern
@@ -374,7 +374,7 @@ recordPattern : Parser (WithComments (Node Pattern))
 recordPattern =
     ParserFast.map2WithRange
         (\range commentsBeforeElements elements ->
-            { comments = commentsBeforeElements |> Rope.prependTo elements.comments
+            { comments = commentsBeforeElements |> SynRope.prependTo elements.comments
             , syntax =
                 Node range (RecordPattern elements.syntax)
             }
@@ -385,7 +385,7 @@ recordPattern =
                 (\head commentsAfterHead tail ->
                     { comments =
                         commentsAfterHead
-                            |> Rope.prependTo tail.comments
+                            |> SynRope.prependTo tail.comments
                     , syntax = head :: tail.syntax
                     }
                 )
@@ -395,7 +395,7 @@ recordPattern =
                     (ParserFast.symbolFollowedBy ","
                         (ParserFast.map3
                             (\beforeName name afterName ->
-                                { comments = beforeName |> Rope.prependTo afterName
+                                { comments = beforeName |> SynRope.prependTo afterName
                                 , syntax = name
                                 }
                             )
@@ -407,5 +407,5 @@ recordPattern =
                 )
                 |> ParserFast.followedBySymbol "}"
             )
-            (ParserFast.symbol "}" { comments = Rope.empty, syntax = [] })
+            (ParserFast.symbol "}" { comments = SynRope.empty, syntax = [] })
         )

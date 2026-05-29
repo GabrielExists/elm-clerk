@@ -17,7 +17,7 @@ import Elm.Syntax.Type exposing (ValueConstructor)
 import Elm.Syntax.TypeAnnotation exposing (TypeAnnotation)
 import ParserFast exposing (Parser)
 import ParserWithComments exposing (Comments, WithComments)
-import Rope
+import SynRope
 
 
 declaration : Parser (WithComments (Node Declaration))
@@ -147,8 +147,8 @@ declarationWithDocumentation =
                             portDeclarationAfterName.typeAnnotation
                     in
                     { comments =
-                        Rope.one documentation
-                            |> Rope.filledPrependTo afterDocumentation.comments
+                        SynRope.one documentation
+                            |> SynRope.filledPrependTo afterDocumentation.comments
                     , syntax =
                         Node
                             { start = portDeclarationAfterName.startLocation
@@ -253,11 +253,11 @@ functionAfterDocumentation =
                         commentsAfterStartName
 
                     Just signature ->
-                        commentsAfterStartName |> Rope.prependTo signature.comments
+                        commentsAfterStartName |> SynRope.prependTo signature.comments
                 )
-                    |> Rope.prependTo arguments.comments
-                    |> Rope.prependTo commentsAfterEqual
-                    |> Rope.prependTo result.comments
+                    |> SynRope.prependTo arguments.comments
+                    |> SynRope.prependTo commentsAfterEqual
+                    |> SynRope.prependTo result.comments
             , syntax =
                 FunctionDeclarationAfterDocumentation
                     { startName = startName
@@ -275,9 +275,9 @@ functionAfterDocumentation =
                 Just
                     { comments =
                         commentsBeforeTypeAnnotation
-                            |> Rope.prependTo typeAnnotationResult.comments
-                            |> Rope.prependTo implementationName.comments
-                            |> Rope.prependTo afterImplementationName
+                            |> SynRope.prependTo typeAnnotationResult.comments
+                            |> SynRope.prependTo implementationName.comments
+                            |> SynRope.prependTo afterImplementationName
                     , syntax =
                         { implementationName = implementationName.syntax
                         , typeAnnotation = typeAnnotationResult.syntax
@@ -309,11 +309,11 @@ functionDeclarationWithoutDocumentation =
                             commentsAfterStartName
 
                         Just signature ->
-                            commentsAfterStartName |> Rope.prependTo signature.comments
+                            commentsAfterStartName |> SynRope.prependTo signature.comments
                     )
-                        |> Rope.prependTo arguments.comments
-                        |> Rope.prependTo commentsAfterEqual
-                        |> Rope.prependTo result.comments
+                        |> SynRope.prependTo arguments.comments
+                        |> SynRope.prependTo commentsAfterEqual
+                        |> SynRope.prependTo result.comments
             in
             case maybeSignature of
                 Nothing ->
@@ -368,9 +368,9 @@ functionDeclarationWithoutDocumentation =
                 Just
                     { comments =
                         commentsBeforeTypeAnnotation
-                            |> Rope.prependTo typeAnnotationResult.comments
-                            |> Rope.prependTo implementationName.comments
-                            |> Rope.prependTo afterImplementationName
+                            |> SynRope.prependTo typeAnnotationResult.comments
+                            |> SynRope.prependTo implementationName.comments
+                            |> SynRope.prependTo afterImplementationName
                     , implementationName = implementationName.syntax
                     , typeAnnotation = typeAnnotationResult.syntax
                     }
@@ -422,7 +422,7 @@ parameterPatternsEqual =
     ParserWithComments.until Tokens.equal
         (ParserFast.map2
             (\patternResult commentsAfterPattern ->
-                { comments = patternResult.comments |> Rope.prependTo commentsAfterPattern
+                { comments = patternResult.comments |> SynRope.prependTo commentsAfterPattern
                 , syntax = patternResult.syntax
                 }
             )
@@ -437,10 +437,10 @@ infixDeclaration =
         (\range commentsAfterInfix direction commentsAfterDirection precedence commentsAfterPrecedence operator commentsAfterOperator commentsAfterEqual fn ->
             { comments =
                 commentsAfterInfix
-                    |> Rope.prependTo commentsAfterDirection
-                    |> Rope.prependTo commentsAfterPrecedence
-                    |> Rope.prependTo commentsAfterOperator
-                    |> Rope.prependTo commentsAfterEqual
+                    |> SynRope.prependTo commentsAfterDirection
+                    |> SynRope.prependTo commentsAfterPrecedence
+                    |> SynRope.prependTo commentsAfterOperator
+                    |> SynRope.prependTo commentsAfterEqual
             , syntax =
                 Node range
                     (Declaration.InfixDeclaration
@@ -486,9 +486,9 @@ portDeclarationAfterDocumentation =
         (\commentsAfterPort ((Node nameRange _) as name) commentsAfterName commentsAfterColon typeAnnotationResult ->
             { comments =
                 commentsAfterPort
-                    |> Rope.prependTo commentsAfterName
-                    |> Rope.prependTo typeAnnotationResult.comments
-                    |> Rope.prependTo commentsAfterColon
+                    |> SynRope.prependTo commentsAfterName
+                    |> SynRope.prependTo typeAnnotationResult.comments
+                    |> SynRope.prependTo commentsAfterColon
             , syntax =
                 PortDeclarationAfterDocumentation
                     { startLocation = { row = nameRange.start.row, column = 1 }
@@ -514,9 +514,9 @@ portDeclarationWithoutDocumentation =
             in
             { comments =
                 commentsAfterPort
-                    |> Rope.prependTo commentsAfterName
-                    |> Rope.prependTo commentsAfterColon
-                    |> Rope.prependTo typeAnnotationResult.comments
+                    |> SynRope.prependTo commentsAfterName
+                    |> SynRope.prependTo commentsAfterColon
+                    |> SynRope.prependTo typeAnnotationResult.comments
             , syntax =
                 Node
                     { start = { row = nameRange.start.row, column = 1 }
@@ -540,7 +540,7 @@ typeOrTypeAliasDefinitionAfterDocumentation : Parser (WithComments DeclarationAf
 typeOrTypeAliasDefinitionAfterDocumentation =
     ParserFast.map2
         (\commentsAfterType declarationAfterDocumentation ->
-            { comments = commentsAfterType |> Rope.prependTo declarationAfterDocumentation.comments
+            { comments = commentsAfterType |> SynRope.prependTo declarationAfterDocumentation.comments
             , syntax = declarationAfterDocumentation.syntax
             }
         )
@@ -557,10 +557,10 @@ typeAliasDefinitionAfterDocumentationAfterTypePrefix =
         (\commentsAfterAlias name commentsAfterName parameters commentsAfterEquals typeAnnotationResult ->
             { comments =
                 commentsAfterAlias
-                    |> Rope.prependTo commentsAfterName
-                    |> Rope.prependTo parameters.comments
-                    |> Rope.prependTo commentsAfterEquals
-                    |> Rope.prependTo typeAnnotationResult.comments
+                    |> SynRope.prependTo commentsAfterName
+                    |> SynRope.prependTo parameters.comments
+                    |> SynRope.prependTo commentsAfterEquals
+                    |> SynRope.prependTo typeAnnotationResult.comments
             , syntax =
                 TypeAliasDeclarationAfterDocumentation
                     { name = name
@@ -583,10 +583,10 @@ customTypeDefinitionAfterDocumentationAfterTypePrefix =
         (\name commentsAfterName parameters commentsAfterEqual headVariant tailVariantsReverse ->
             { comments =
                 commentsAfterName
-                    |> Rope.prependTo parameters.comments
-                    |> Rope.prependTo commentsAfterEqual
-                    |> Rope.prependTo headVariant.comments
-                    |> Rope.prependTo tailVariantsReverse.comments
+                    |> SynRope.prependTo parameters.comments
+                    |> SynRope.prependTo commentsAfterEqual
+                    |> SynRope.prependTo headVariant.comments
+                    |> SynRope.prependTo tailVariantsReverse.comments
             , syntax =
                 TypeDeclarationAfterDocumentation
                     { name = name
@@ -608,7 +608,7 @@ customTypeDefinitionAfterDocumentationAfterTypePrefix =
                         (\commentsBeforePipe variantResult ->
                             { comments =
                                 commentsBeforePipe
-                                    |> Rope.prependTo variantResult.comments
+                                    |> SynRope.prependTo variantResult.comments
                             , syntax = variantResult.syntax
                             }
                         )
@@ -627,7 +627,7 @@ typeOrTypeAliasDefinitionWithoutDocumentation =
             let
                 allComments : Comments
                 allComments =
-                    commentsAfterType |> Rope.prependTo afterStart.comments
+                    commentsAfterType |> SynRope.prependTo afterStart.comments
             in
             case afterStart.syntax of
                 TypeDeclarationWithoutDocumentation typeDeclarationAfterDocumentation ->
@@ -691,10 +691,10 @@ typeAliasDefinitionWithoutDocumentationAfterTypePrefix =
         (\commentsAfterAlias name commentsAfterName parameters commentsAfterEqual typeAnnotationResult ->
             { comments =
                 commentsAfterAlias
-                    |> Rope.prependTo commentsAfterName
-                    |> Rope.prependTo parameters.comments
-                    |> Rope.prependTo commentsAfterEqual
-                    |> Rope.prependTo typeAnnotationResult.comments
+                    |> SynRope.prependTo commentsAfterName
+                    |> SynRope.prependTo parameters.comments
+                    |> SynRope.prependTo commentsAfterEqual
+                    |> SynRope.prependTo typeAnnotationResult.comments
             , syntax =
                 TypeAliasDeclarationWithoutDocumentation
                     { name = name
@@ -717,10 +717,10 @@ customTypeDefinitionWithoutDocumentationAfterTypePrefix =
         (\name commentsAfterName parameters commentsAfterEqual headVariant tailVariantsReverse ->
             { comments =
                 commentsAfterName
-                    |> Rope.prependTo parameters.comments
-                    |> Rope.prependTo commentsAfterEqual
-                    |> Rope.prependTo headVariant.comments
-                    |> Rope.prependTo tailVariantsReverse.comments
+                    |> SynRope.prependTo parameters.comments
+                    |> SynRope.prependTo commentsAfterEqual
+                    |> SynRope.prependTo headVariant.comments
+                    |> SynRope.prependTo tailVariantsReverse.comments
             , syntax =
                 TypeDeclarationWithoutDocumentation
                     { name = name
@@ -742,7 +742,7 @@ customTypeDefinitionWithoutDocumentationAfterTypePrefix =
                         (\commentsBeforePipe variantResult ->
                             { comments =
                                 commentsBeforePipe
-                                    |> Rope.prependTo variantResult.comments
+                                    |> SynRope.prependTo variantResult.comments
                             , syntax = variantResult.syntax
                             }
                         )
@@ -770,7 +770,7 @@ valueConstructorOptimisticLayout =
             in
             { comments =
                 commentsAfterName
-                    |> Rope.prependTo argumentsReverse.comments
+                    |> SynRope.prependTo argumentsReverse.comments
             , syntax =
                 Node fullRange
                     { name = name
@@ -784,7 +784,7 @@ valueConstructorOptimisticLayout =
             (Layout.positivelyIndentedFollowedBy
                 (ParserFast.map2
                     (\typeAnnotationResult commentsAfter ->
-                        { comments = typeAnnotationResult.comments |> Rope.prependTo commentsAfter
+                        { comments = typeAnnotationResult.comments |> SynRope.prependTo commentsAfter
                         , syntax = typeAnnotationResult.syntax
                         }
                     )

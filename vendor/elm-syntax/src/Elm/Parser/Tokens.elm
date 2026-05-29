@@ -19,7 +19,7 @@ module Elm.Parser.Tokens exposing
 -}
 
 import Char
-import Char.Extra
+import Char.SynExtra
 import Elm.Syntax.Node exposing (Node(..))
 import Elm.Syntax.Range exposing (Range)
 import ParserFast
@@ -253,7 +253,7 @@ singleQuotedStringLiteralAfterDoubleQuote =
                             False
 
                         _ ->
-                            not (Char.Extra.isUtf16Surrogate c)
+                            not (Char.SynExtra.isUtf16Surrogate c)
                 )
             )
         )
@@ -280,7 +280,7 @@ tripleQuotedStringLiteralOfterTripleDoubleQuote =
                             False
 
                         _ ->
-                            not (Char.Extra.isUtf16Surrogate c)
+                            not (Char.SynExtra.isUtf16Surrogate c)
                 )
             )
         )
@@ -294,16 +294,16 @@ tripleQuotedStringLiteralOfterTripleDoubleQuote =
 functionName : ParserFast.Parser String
 functionName =
     ParserFast.ifFollowedByWhileValidateWithoutLinebreak
-        Char.Extra.unicodeIsLowerFast
-        Char.Extra.unicodeIsAlphaNumOrUnderscoreFast
+        Char.SynExtra.unicodeIsLowerFast
+        Char.SynExtra.unicodeIsAlphaNumOrUnderscoreFast
         isNotReserved
 
 
 functionNameNode : ParserFast.Parser (Node String)
 functionNameNode =
     ParserFast.ifFollowedByWhileValidateMapWithRangeWithoutLinebreak Node
-        Char.Extra.unicodeIsLowerFast
-        Char.Extra.unicodeIsAlphaNumOrUnderscoreFast
+        Char.SynExtra.unicodeIsLowerFast
+        Char.SynExtra.unicodeIsAlphaNumOrUnderscoreFast
         isNotReserved
 
 
@@ -311,38 +311,38 @@ functionNameMapWithRange : (Range -> String -> res) -> ParserFast.Parser res
 functionNameMapWithRange rangeAndNameToResult =
     ParserFast.ifFollowedByWhileValidateMapWithRangeWithoutLinebreak
         rangeAndNameToResult
-        Char.Extra.unicodeIsLowerFast
-        Char.Extra.unicodeIsAlphaNumOrUnderscoreFast
+        Char.SynExtra.unicodeIsLowerFast
+        Char.SynExtra.unicodeIsAlphaNumOrUnderscoreFast
         isNotReserved
 
 
 functionNameNotInfixNode : ParserFast.Parser (Node String)
 functionNameNotInfixNode =
     ParserFast.ifFollowedByWhileValidateMapWithRangeWithoutLinebreak Node
-        Char.Extra.unicodeIsLowerFast
-        Char.Extra.unicodeIsAlphaNumOrUnderscoreFast
+        Char.SynExtra.unicodeIsLowerFast
+        Char.SynExtra.unicodeIsAlphaNumOrUnderscoreFast
         (\name -> name /= "infix" && isNotReserved name)
 
 
 typeName : ParserFast.Parser String
 typeName =
     ParserFast.ifFollowedByWhileWithoutLinebreak
-        Char.Extra.unicodeIsUpperFast
-        Char.Extra.unicodeIsAlphaNumOrUnderscoreFast
+        Char.SynExtra.unicodeIsUpperFast
+        Char.SynExtra.unicodeIsAlphaNumOrUnderscoreFast
 
 
 typeNameMapWithRange : (Range -> String -> res) -> ParserFast.Parser res
 typeNameMapWithRange rangeAndNameToRes =
     ParserFast.ifFollowedByWhileMapWithRangeWithoutLinebreak rangeAndNameToRes
-        Char.Extra.unicodeIsUpperFast
-        Char.Extra.unicodeIsAlphaNumOrUnderscoreFast
+        Char.SynExtra.unicodeIsUpperFast
+        Char.SynExtra.unicodeIsAlphaNumOrUnderscoreFast
 
 
 typeNameNode : ParserFast.Parser (Node String)
 typeNameNode =
     ParserFast.ifFollowedByWhileMapWithRangeWithoutLinebreak Node
-        Char.Extra.unicodeIsUpperFast
-        Char.Extra.unicodeIsAlphaNumOrUnderscoreFast
+        Char.SynExtra.unicodeIsUpperFast
+        Char.SynExtra.unicodeIsAlphaNumOrUnderscoreFast
 
 
 isAllowedOperatorToken : String -> Bool

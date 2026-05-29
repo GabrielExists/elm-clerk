@@ -1,6 +1,6 @@
 module Elm.Parser.Comments exposing (declarationDocumentation, moduleDocumentation, multilineComment, singleLineComment)
 
-import Char.Extra
+import Char.SynExtra
 import Elm.Syntax.Documentation exposing (Documentation)
 import Elm.Syntax.Node exposing (Node(..))
 import ParserFast exposing (Parser)
@@ -19,7 +19,7 @@ singleLineComment =
                         False
 
                     _ ->
-                        not (Char.Extra.isUtf16Surrogate c)
+                        not (Char.SynExtra.isUtf16Surrogate c)
             )
             (\range content ->
                 Node

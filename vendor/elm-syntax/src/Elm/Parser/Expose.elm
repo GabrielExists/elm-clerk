@@ -6,7 +6,7 @@ import Elm.Syntax.Exposing exposing (Exposing(..), TopLevelExpose(..))
 import Elm.Syntax.Node exposing (Node(..))
 import ParserFast exposing (Parser)
 import ParserWithComments exposing (WithComments)
-import Rope
+import SynRope
 
 
 exposeDefinition : Parser (WithComments (Node Exposing))
@@ -15,8 +15,8 @@ exposeDefinition =
         (\range commentsAfterExposing commentsBefore exposingListInnerResult ->
             { comments =
                 commentsAfterExposing
-                    |> Rope.prependTo commentsBefore
-                    |> Rope.prependTo exposingListInnerResult.comments
+                    |> SynRope.prependTo commentsBefore
+                    |> SynRope.prependTo exposingListInnerResult.comments
             , syntax = Node range exposingListInnerResult.syntax
             }
         )
@@ -34,8 +34,8 @@ exposingListInner =
             (\headElement commentsAfterHeadElement tailElements ->
                 { comments =
                     headElement.comments
-                        |> Rope.prependTo commentsAfterHeadElement
-                        |> Rope.prependTo tailElements.comments
+                        |> SynRope.prependTo commentsAfterHeadElement
+                        |> SynRope.prependTo tailElements.comments
                 , syntax =
                     Explicit
                         (headElement.syntax
@@ -73,7 +73,7 @@ infixExpose : ParserFast.Parser (WithComments (Node TopLevelExpose))
 infixExpose =
     ParserFast.map2WithRange
         (\range infixName () ->
-            { comments = Rope.empty
+            { comments = SynRope.empty
             , syntax = Node range (InfixExpose infixName)
             }
         )
@@ -116,7 +116,7 @@ typeExpose : Parser (WithComments (Node TopLevelExpose))
 typeExpose =
     ParserFast.map3
         (\(Node typeNameRange typeName) commentsBeforeMaybeOpen maybeOpen ->
-            { comments = commentsBeforeMaybeOpen |> Rope.prependTo maybeOpen.comments
+            { comments = commentsBeforeMaybeOpen |> SynRope.prependTo maybeOpen.comments
             , syntax =
                 case maybeOpen.syntax of
                     Nothing ->
@@ -134,13 +134,13 @@ typeExpose =
         Layout.optimisticLayout
         (ParserFast.map2WithRangeOrSucceed
             (\range left right ->
-                { comments = left |> Rope.prependTo right, syntax = Just range }
+                { comments = left |> SynRope.prependTo right, syntax = Just range }
             )
             (ParserFast.symbolFollowedBy "(" Layout.maybeLayout)
             (ParserFast.symbolFollowedBy ".." Layout.maybeLayout
                 |> ParserFast.followedBySymbol ")"
             )
-            { comments = Rope.empty, syntax = Nothing }
+            { comments = SynRope.empty, syntax = Nothing }
         )
 
 
@@ -148,7 +148,7 @@ functionExpose : Parser (WithComments (Node TopLevelExpose))
 functionExpose =
     Tokens.functionNameMapWithRange
         (\range name ->
-            { comments = Rope.empty
+            { comments = SynRope.empty
             , syntax =
                 Node range (FunctionExpose name)
             }

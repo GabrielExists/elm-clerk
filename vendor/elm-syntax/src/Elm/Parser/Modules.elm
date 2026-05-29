@@ -6,10 +6,10 @@ import Elm.Parser.Layout as Layout
 import Elm.Parser.Tokens as Tokens
 import Elm.Syntax.Module exposing (Module(..))
 import Elm.Syntax.Node exposing (Node(..))
-import List.Extra
+import List.SynExtra
 import ParserFast exposing (Parser)
 import ParserWithComments exposing (WithComments)
-import Rope
+import SynRope
 
 
 moduleDefinition : Parser (WithComments (Node Module))
@@ -24,7 +24,7 @@ effectWhereClause : Parser (WithComments ( String, Node String ))
 effectWhereClause =
     ParserFast.map4
         (\fnName commentsAfterFnName commentsAfterEqual typeName_ ->
-            { comments = commentsAfterFnName |> Rope.prependTo commentsAfterEqual
+            { comments = commentsAfterFnName |> SynRope.prependTo commentsAfterEqual
             , syntax = ( fnName, typeName_ )
             }
         )
@@ -46,17 +46,17 @@ whereBlock =
                 in
                 { comments =
                     commentsBeforeHead
-                        |> Rope.prependTo head.comments
-                        |> Rope.prependTo commentsAfterHead
-                        |> Rope.prependTo tail.comments
+                        |> SynRope.prependTo head.comments
+                        |> SynRope.prependTo commentsAfterHead
+                        |> SynRope.prependTo tail.comments
                 , syntax =
                     { command =
                         pairs
-                            |> List.Extra.find (\( fnName, _ ) -> fnName == "command")
+                            |> List.SynExtra.find (\( fnName, _ ) -> fnName == "command")
                             |> Maybe.map Tuple.second
                     , subscription =
                         pairs
-                            |> List.Extra.find (\( fnName, _ ) -> fnName == "subscription")
+                            |> List.SynExtra.find (\( fnName, _ ) -> fnName == "subscription")
                             |> Maybe.map Tuple.second
                     }
                 }
@@ -75,7 +75,7 @@ effectWhereClauses : Parser (WithComments { command : Maybe (Node String), subsc
 effectWhereClauses =
     ParserFast.map2
         (\commentsBefore whereResult ->
-            { comments = commentsBefore |> Rope.prependTo whereResult.comments
+            { comments = commentsBefore |> SynRope.prependTo whereResult.comments
             , syntax = whereResult.syntax
             }
         )
@@ -89,11 +89,11 @@ effectModuleDefinition =
         (\range commentsAfterEffect commentsAfterModule name commentsAfterName whereClauses commentsAfterWhereClauses exp ->
             { comments =
                 commentsAfterEffect
-                    |> Rope.prependTo commentsAfterModule
-                    |> Rope.prependTo commentsAfterName
-                    |> Rope.prependTo whereClauses.comments
-                    |> Rope.prependTo commentsAfterWhereClauses
-                    |> Rope.prependTo exp.comments
+                    |> SynRope.prependTo commentsAfterModule
+                    |> SynRope.prependTo commentsAfterName
+                    |> SynRope.prependTo whereClauses.comments
+                    |> SynRope.prependTo commentsAfterWhereClauses
+                    |> SynRope.prependTo exp.comments
             , syntax =
                 Node range
                     (EffectModule
@@ -120,8 +120,8 @@ normalModuleDefinition =
         (\range commentsAfterModule moduleName commentsAfterModuleName exposingList ->
             { comments =
                 commentsAfterModule
-                    |> Rope.prependTo commentsAfterModuleName
-                    |> Rope.prependTo exposingList.comments
+                    |> SynRope.prependTo commentsAfterModuleName
+                    |> SynRope.prependTo exposingList.comments
             , syntax =
                 Node range
                     (NormalModule
@@ -143,9 +143,9 @@ portModuleDefinition =
         (\range commentsAfterPort commentsAfterModule moduleName commentsAfterModuleName exposingList ->
             { comments =
                 commentsAfterPort
-                    |> Rope.prependTo commentsAfterModule
-                    |> Rope.prependTo commentsAfterModuleName
-                    |> Rope.prependTo exposingList.comments
+                    |> SynRope.prependTo commentsAfterModule
+                    |> SynRope.prependTo commentsAfterModuleName
+                    |> SynRope.prependTo exposingList.comments
             , syntax =
                 Node range
                     (PortModule { moduleName = moduleName, exposingList = exposingList.syntax })

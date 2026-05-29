@@ -1,4 +1,4 @@
-module List.Extra exposing
+module List.SynExtra exposing
     ( find
     , unique
     )

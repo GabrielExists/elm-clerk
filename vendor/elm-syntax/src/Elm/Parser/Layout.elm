@@ -15,7 +15,7 @@ module Elm.Parser.Layout exposing
 import Elm.Parser.Comments as Comments
 import ParserFast exposing (Parser)
 import ParserWithComments exposing (Comments, WithComments)
-import Rope
+import SynRope
 
 
 whitespaceAndCommentsOrEmpty : Parser Comments
@@ -38,7 +38,7 @@ whitespaceAndCommentsOrEmpty =
                     _ ->
                         Nothing
             )
-            Rope.empty
+            SynRope.empty
         )
 
 
@@ -46,20 +46,20 @@ fromMultilineCommentNodeOrEmptyOnProblem : Parser Comments
 fromMultilineCommentNodeOrEmptyOnProblem =
     ParserFast.map2OrSucceed
         (\comment commentsAfter ->
-            Rope.one comment |> Rope.filledPrependTo commentsAfter
+            SynRope.one comment |> SynRope.filledPrependTo commentsAfter
         )
         (Comments.multilineComment
             |> ParserFast.followedBySkipWhileWhitespace
         )
         whitespaceAndCommentsOrEmptyLoop
-        Rope.empty
+        SynRope.empty
 
 
 fromSingleLineCommentNode : Parser Comments
 fromSingleLineCommentNode =
     ParserFast.map2
         (\content commentsAfter ->
-            Rope.one content |> Rope.filledPrependTo commentsAfter
+            SynRope.one content |> SynRope.filledPrependTo commentsAfter
         )
         (Comments.singleLineComment
             |> ParserFast.followedBySkipWhileWhitespace
@@ -75,8 +75,8 @@ whitespaceAndCommentsOrEmptyLoop =
             Comments.multilineComment
             |> ParserFast.followedBySkipWhileWhitespace
         )
-        Rope.empty
-        (\right soFar -> soFar |> Rope.prependToFilled (Rope.one right))
+        SynRope.empty
+        (\right soFar -> soFar |> SynRope.prependToFilled (SynRope.one right))
         identity
 
 
@@ -134,7 +134,7 @@ layoutStrictFollowedByComments : Parser Comments -> Parser Comments
 layoutStrictFollowedByComments nextParser =
     ParserFast.map2
         (\commentsBefore afterComments ->
-            commentsBefore |> Rope.prependTo afterComments
+            commentsBefore |> SynRope.prependTo afterComments
         )
         optimisticLayout
         (onTopIndentationFollowedBy nextParser)
@@ -144,7 +144,7 @@ layoutStrictFollowedByWithComments : Parser (WithComments syntax) -> Parser (Wit
 layoutStrictFollowedByWithComments nextParser =
     ParserFast.map2
         (\commentsBefore after ->
-            { comments = commentsBefore |> Rope.prependTo after.comments
+            { comments = commentsBefore |> SynRope.prependTo after.comments
             , syntax = after.syntax
             }
         )
@@ -215,8 +215,8 @@ maybeAroundBothSides x =
         (\before v after ->
             { comments =
                 before
-                    |> Rope.prependTo v.comments
-                    |> Rope.prependTo after
+                    |> SynRope.prependTo v.comments
+                    |> SynRope.prependTo after
             , syntax = v.syntax
             }
         )

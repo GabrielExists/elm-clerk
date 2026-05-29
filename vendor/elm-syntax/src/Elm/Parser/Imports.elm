@@ -8,7 +8,7 @@ import Elm.Syntax.Import exposing (Import)
 import Elm.Syntax.Node exposing (Node(..))
 import ParserFast exposing (Parser)
 import ParserWithComments exposing (Comments, WithComments)
-import Rope
+import SynRope
 
 
 importDefinition : Parser (WithComments (Node Import))
@@ -19,7 +19,7 @@ importDefinition =
                 commentsBeforeAlias : Comments
                 commentsBeforeAlias =
                     commentsAfterImport
-                        |> Rope.prependTo commentsAfterModuleName
+                        |> SynRope.prependTo commentsAfterModuleName
             in
             case maybeModuleAlias of
                 Nothing ->
@@ -44,7 +44,7 @@ importDefinition =
                                     exposingListValue.syntax
                             in
                             { comments =
-                                commentsBeforeAlias |> Rope.prependTo exposingListValue.comments
+                                commentsBeforeAlias |> SynRope.prependTo exposingListValue.comments
                             , syntax =
                                 Node { start = start, end = exposingRange.end }
                                     { moduleName = mod
@@ -61,7 +61,7 @@ importDefinition =
                                     moduleAliasResult.syntax
                             in
                             { comments =
-                                commentsBeforeAlias |> Rope.prependTo moduleAliasResult.comments
+                                commentsBeforeAlias |> SynRope.prependTo moduleAliasResult.comments
                             , syntax =
                                 Node { start = start, end = aliasRange.end }
                                     { moduleName = mod
@@ -77,8 +77,8 @@ importDefinition =
                             in
                             { comments =
                                 commentsBeforeAlias
-                                    |> Rope.prependTo moduleAliasResult.comments
-                                    |> Rope.prependTo exposingListValue.comments
+                                    |> SynRope.prependTo moduleAliasResult.comments
+                                    |> SynRope.prependTo exposingListValue.comments
                             , syntax =
                                 Node { start = start, end = exposingRange.end }
                                     { moduleName = mod
@@ -93,7 +93,7 @@ importDefinition =
         (ParserFast.map3OrSucceed
             (\commentsBefore moduleAliasNode commentsAfter ->
                 Just
-                    { comments = commentsBefore |> Rope.prependTo commentsAfter
+                    { comments = commentsBefore |> SynRope.prependTo commentsAfter
                     , syntax = moduleAliasNode
                     }
             )
@@ -109,7 +109,7 @@ importDefinition =
         (ParserFast.map2OrSucceed
             (\exposingResult commentsAfter ->
                 Just
-                    { comments = exposingResult.comments |> Rope.prependTo commentsAfter
+                    { comments = exposingResult.comments |> SynRope.prependTo commentsAfter
                     , syntax = exposingResult.syntax
                     }
             )

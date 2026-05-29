@@ -12,7 +12,7 @@ import Elm.Syntax.Range exposing (Range)
 import Elm.Syntax.Signature exposing (Signature)
 import ParserFast exposing (Parser)
 import ParserWithComments exposing (Comments, WithComments)
-import Rope
+import SynRope
 
 
 subExpression : Parser (WithComments (Node Expression))
@@ -267,7 +267,7 @@ glslExpressionAfterOpeningSquareBracket =
     ParserFast.symbolFollowedBy "glsl|"
         (ParserFast.mapWithRange
             (\range s ->
-                { comments = Rope.empty
+                { comments = SynRope.empty
                 , syntax =
                     Node
                         -- TODO for v8: don't include extra end width (from bug in elm/parser) in range
@@ -303,7 +303,7 @@ expressionAfterOpeningSquareBracket =
         glslExpressionAfterOpeningSquareBracket
         (ParserFast.map2WithRange
             (\range commentsBefore elements ->
-                { comments = commentsBefore |> Rope.prependTo elements.comments
+                { comments = commentsBefore |> SynRope.prependTo elements.comments
                 , syntax =
                     Node
                         { start = { row = range.start.row, column = range.start.column - 1 }
@@ -314,13 +314,13 @@ expressionAfterOpeningSquareBracket =
             )
             Layout.maybeLayout
             (ParserFast.oneOf2
-                (ParserFast.symbol "]" { comments = Rope.empty, syntax = ListExpr [] })
+                (ParserFast.symbol "]" { comments = SynRope.empty, syntax = ListExpr [] })
                 (ParserFast.map3
                     (\head commentsAfterHead tail ->
                         { comments =
                             head.comments
-                                |> Rope.prependTo commentsAfterHead
-                                |> Rope.prependTo tail.comments
+                                |> SynRope.prependTo commentsAfterHead
+                                |> SynRope.prependTo tail.comments
                         , syntax = ListExpr (head.syntax :: tail.syntax)
                         }
                     )
@@ -366,7 +366,7 @@ recordExpressionFollowedByRecordAccess =
                 (\range commentsBefore afterCurly ->
                     { comments =
                         commentsBefore
-                            |> Rope.prependTo afterCurly.comments
+                            |> SynRope.prependTo afterCurly.comments
                     , syntax = Node (rangeMoveStartLeftByOneColumn range) afterCurly.syntax
                     }
                 )
@@ -384,9 +384,9 @@ recordContentsCurlyEnd =
             (\nameNode commentsAfterFunctionName afterNameBeforeFields tailFields commentsBeforeClosingCurly ->
                 { comments =
                     commentsAfterFunctionName
-                        |> Rope.prependTo afterNameBeforeFields.comments
-                        |> Rope.prependTo tailFields.comments
-                        |> Rope.prependTo commentsBeforeClosingCurly
+                        |> SynRope.prependTo afterNameBeforeFields.comments
+                        |> SynRope.prependTo tailFields.comments
+                        |> SynRope.prependTo commentsBeforeClosingCurly
                 , syntax =
                     case afterNameBeforeFields.syntax of
                         RecordUpdateFirstSetter firstField ->
@@ -402,7 +402,7 @@ recordContentsCurlyEnd =
                 (ParserFast.symbolFollowedBy "|"
                     (ParserFast.map2
                         (\commentsBefore setterResult ->
-                            { comments = commentsBefore |> Rope.prependTo setterResult.comments
+                            { comments = commentsBefore |> SynRope.prependTo setterResult.comments
                             , syntax = RecordUpdateFirstSetter setterResult.syntax
                             }
                         )
@@ -415,8 +415,8 @@ recordContentsCurlyEnd =
                         (\commentsBefore expressionResult commentsAfter ->
                             { comments =
                                 commentsBefore
-                                    |> Rope.prependTo expressionResult.comments
-                                    |> Rope.prependTo commentsAfter
+                                    |> SynRope.prependTo expressionResult.comments
+                                    |> SynRope.prependTo commentsAfter
                             , syntax = FieldsFirstValue expressionResult.syntax
                             }
                         )
@@ -429,7 +429,7 @@ recordContentsCurlyEnd =
             recordFields
             (Layout.maybeLayout |> ParserFast.followedBySymbol "}")
         )
-        (ParserFast.symbol "}" { comments = Rope.empty, syntax = RecordExpr [] })
+        (ParserFast.symbol "}" { comments = SynRope.empty, syntax = RecordExpr [] })
 
 
 type RecordFieldsOrUpdateAfterName
@@ -443,7 +443,7 @@ recordFields =
         (ParserFast.symbolFollowedBy ","
             (ParserFast.map2
                 (\commentsBefore setterResult ->
-                    { comments = commentsBefore |> Rope.prependTo setterResult.comments
+                    { comments = commentsBefore |> SynRope.prependTo setterResult.comments
                     , syntax = setterResult.syntax
                     }
                 )
@@ -459,9 +459,9 @@ recordSetterNodeWithLayout =
         (\range name commentsAfterFunctionName commentsAfterEquals expressionResult commentsAfterExpression ->
             { comments =
                 commentsAfterFunctionName
-                    |> Rope.prependTo commentsAfterEquals
-                    |> Rope.prependTo expressionResult.comments
-                    |> Rope.prependTo commentsAfterExpression
+                    |> SynRope.prependTo commentsAfterEquals
+                    |> SynRope.prependTo expressionResult.comments
+                    |> SynRope.prependTo commentsAfterExpression
             , syntax = Node range ( name, expressionResult.syntax )
             }
         )
@@ -478,7 +478,7 @@ literalExpression : Parser (WithComments (Node Expression))
 literalExpression =
     Tokens.singleOrTripleQuotedStringLiteralMapWithRange
         (\range string ->
-            { comments = Rope.empty
+            { comments = SynRope.empty
             , syntax = Node range (Literal string)
             }
         )
@@ -488,7 +488,7 @@ charLiteralExpression : Parser (WithComments (Node Expression))
 charLiteralExpression =
     Tokens.characterLiteralMapWithRange
         (\range char ->
-            { comments = Rope.empty
+            { comments = SynRope.empty
             , syntax = Node range (CharLiteral char)
             }
         )
@@ -509,11 +509,11 @@ lambdaExpression =
                 in
                 { comments =
                     commentsAfterBackslash
-                        |> Rope.prependTo firstArg.comments
-                        |> Rope.prependTo commentsAfterFirstArg
-                        |> Rope.prependTo secondUpArgs.comments
-                        |> Rope.prependTo commentsAfterArrow
-                        |> Rope.prependTo expressionResult.comments
+                        |> SynRope.prependTo firstArg.comments
+                        |> SynRope.prependTo commentsAfterFirstArg
+                        |> SynRope.prependTo secondUpArgs.comments
+                        |> SynRope.prependTo commentsAfterArrow
+                        |> SynRope.prependTo expressionResult.comments
                 , syntax =
                     Node
                         { start = { row = start.row, column = start.column - 1 }
@@ -535,7 +535,7 @@ lambdaExpression =
                     (\patternResult commentsAfter ->
                         { comments =
                             patternResult.comments
-                                |> Rope.prependTo commentsAfter
+                                |> SynRope.prependTo commentsAfter
                         , syntax = patternResult.syntax
                         }
                     )
@@ -563,10 +563,10 @@ caseExpression =
                 in
                 { comments =
                     commentsAfterCase
-                        |> Rope.prependTo casedExpressionResult.comments
-                        |> Rope.prependTo commentsBeforeOf
-                        |> Rope.prependTo commentsAfterOf
-                        |> Rope.prependTo casesResult.comments
+                        |> SynRope.prependTo casedExpressionResult.comments
+                        |> SynRope.prependTo commentsBeforeOf
+                        |> SynRope.prependTo commentsAfterOf
+                        |> SynRope.prependTo casesResult.comments
                 , syntax =
                     Node
                         { start = { row = start.row, column = start.column - 4 }
@@ -603,10 +603,10 @@ caseStatements =
         (\firstCasePatternResult commentsAfterFirstCasePattern commentsAfterFirstCaseArrowRight firstCaseExpressionResult lastToSecondCase ->
             { comments =
                 firstCasePatternResult.comments
-                    |> Rope.prependTo commentsAfterFirstCasePattern
-                    |> Rope.prependTo commentsAfterFirstCaseArrowRight
-                    |> Rope.prependTo firstCaseExpressionResult.comments
-                    |> Rope.prependTo lastToSecondCase.comments
+                    |> SynRope.prependTo commentsAfterFirstCasePattern
+                    |> SynRope.prependTo commentsAfterFirstCaseArrowRight
+                    |> SynRope.prependTo firstCaseExpressionResult.comments
+                    |> SynRope.prependTo lastToSecondCase.comments
             , syntax =
                 ( ( firstCasePatternResult.syntax, firstCaseExpressionResult.syntax )
                 , lastToSecondCase.syntax
@@ -627,9 +627,9 @@ caseStatement =
             (\pattern commentsBeforeArrowRight commentsAfterArrowRight expr ->
                 { comments =
                     pattern.comments
-                        |> Rope.prependTo commentsBeforeArrowRight
-                        |> Rope.prependTo commentsAfterArrowRight
-                        |> Rope.prependTo expr.comments
+                        |> SynRope.prependTo commentsBeforeArrowRight
+                        |> SynRope.prependTo commentsAfterArrowRight
+                        |> SynRope.prependTo expr.comments
                 , syntax = ( pattern.syntax, expr.syntax )
                 }
             )
@@ -655,8 +655,8 @@ letExpression =
                 in
                 { comments =
                     declarations.comments
-                        |> Rope.prependTo commentsAfterIn
-                        |> Rope.prependTo expressionResult.comments
+                        |> SynRope.prependTo commentsAfterIn
+                        |> SynRope.prependTo expressionResult.comments
                 , syntax =
                     Node
                         { start = { row = start.row, column = start.column - 3 }
@@ -674,7 +674,7 @@ letExpression =
                     (\commentsAfterLet declarations ->
                         { comments =
                             commentsAfterLet
-                                |> Rope.prependTo declarations.comments
+                                |> SynRope.prependTo declarations.comments
                         , declarations = declarations.syntax
                         }
                     )
@@ -697,8 +697,8 @@ letDeclarationsIn =
             (\headLetResult commentsAfter tailLetResult ->
                 { comments =
                     headLetResult.comments
-                        |> Rope.prependTo commentsAfter
-                        |> Rope.prependTo tailLetResult.comments
+                        |> SynRope.prependTo commentsAfter
+                        |> SynRope.prependTo tailLetResult.comments
                 , syntax = headLetResult.syntax :: tailLetResult.syntax
                 }
             )
@@ -716,7 +716,7 @@ blockElement =
     Layout.onTopIndentationFollowedBy
         (ParserFast.map2
             (\letDeclarationResult commentsAfter ->
-                { comments = letDeclarationResult.comments |> Rope.prependTo commentsAfter
+                { comments = letDeclarationResult.comments |> SynRope.prependTo commentsAfter
                 , syntax = letDeclarationResult.syntax
                 }
             )
@@ -741,9 +741,9 @@ letDestructuringDeclaration =
             in
             { comments =
                 pattern.comments
-                    |> Rope.prependTo commentsAfterPattern
-                    |> Rope.prependTo commentsAfterEquals
-                    |> Rope.prependTo expressionResult.comments
+                    |> SynRope.prependTo commentsAfterPattern
+                    |> SynRope.prependTo commentsAfterEquals
+                    |> SynRope.prependTo expressionResult.comments
             , syntax =
                 Node { start = start, end = end }
                     (LetDestructuring pattern.syntax expressionResult.syntax)
@@ -767,11 +767,11 @@ letFunction =
                             commentsAfterStartName
 
                         Just signature ->
-                            commentsAfterStartName |> Rope.prependTo signature.comments
+                            commentsAfterStartName |> SynRope.prependTo signature.comments
                     )
-                        |> Rope.prependTo arguments.comments
-                        |> Rope.prependTo commentsAfterEqual
-                        |> Rope.prependTo expressionResult.comments
+                        |> SynRope.prependTo arguments.comments
+                        |> SynRope.prependTo commentsAfterEqual
+                        |> SynRope.prependTo expressionResult.comments
             in
             case maybeSignature of
                 Nothing ->
@@ -826,9 +826,9 @@ letFunction =
                 Just
                     { comments =
                         commentsBeforeTypeAnnotation
-                            |> Rope.prependTo typeAnnotationResult.comments
-                            |> Rope.prependTo implementationName.comments
-                            |> Rope.prependTo afterImplementationName
+                            |> SynRope.prependTo typeAnnotationResult.comments
+                            |> SynRope.prependTo implementationName.comments
+                            |> SynRope.prependTo afterImplementationName
                     , implementationName = implementationName.syntax
                     , typeAnnotation = typeAnnotationResult.syntax
                     }
@@ -880,7 +880,7 @@ parameterPatternsEqual =
     ParserWithComments.until Tokens.equal
         (ParserFast.map2
             (\patternResult commentsAfterPattern ->
-                { comments = patternResult.comments |> Rope.prependTo commentsAfterPattern
+                { comments = patternResult.comments |> SynRope.prependTo commentsAfterPattern
                 , syntax = patternResult.syntax
                 }
             )
@@ -893,17 +893,17 @@ numberExpression : Parser (WithComments (Node Expression))
 numberExpression =
     ParserFast.floatOrIntegerDecimalOrHexadecimalMapWithRange
         (\range n ->
-            { comments = Rope.empty
+            { comments = SynRope.empty
             , syntax = Node range (Floatable n)
             }
         )
         (\range n ->
-            { comments = Rope.empty
+            { comments = SynRope.empty
             , syntax = Node range (Integer n)
             }
         )
         (\range n ->
-            { comments = Rope.empty
+            { comments = SynRope.empty
             , syntax = Node range (Hex n)
             }
         )
@@ -920,13 +920,13 @@ ifBlockExpression =
                 in
                 { comments =
                     commentsAfterIf
-                        |> Rope.prependTo condition.comments
-                        |> Rope.prependTo commentsBeforeThen
-                        |> Rope.prependTo commentsAfterThen
-                        |> Rope.prependTo ifTrue.comments
-                        |> Rope.prependTo commentsBeforeElse
-                        |> Rope.prependTo commentsAfterElse
-                        |> Rope.prependTo ifFalse.comments
+                        |> SynRope.prependTo condition.comments
+                        |> SynRope.prependTo commentsBeforeThen
+                        |> SynRope.prependTo commentsAfterThen
+                        |> SynRope.prependTo ifTrue.comments
+                        |> SynRope.prependTo commentsBeforeElse
+                        |> SynRope.prependTo commentsAfterElse
+                        |> SynRope.prependTo ifFalse.comments
                 , syntax =
                     Node
                         { start = { row = start.row, column = start.column - 2 }
@@ -1015,7 +1015,7 @@ qualifiedOrVariantOrRecordConstructorReferenceExpressionFollowedByRecordAccess :
 qualifiedOrVariantOrRecordConstructorReferenceExpressionFollowedByRecordAccess =
     ParserFast.map2WithRange
         (\range firstName after ->
-            { comments = Rope.empty
+            { comments = SynRope.empty
             , syntax =
                 case after of
                     Nothing ->
@@ -1105,7 +1105,7 @@ unqualifiedFunctionReferenceExpressionFollowedByRecordAccess =
         )
         (Tokens.functionNameMapWithRange
             (\range unqualified ->
-                { comments = Rope.empty
+                { comments = SynRope.empty
                 , syntax =
                     Node range (FunctionOrValue [] unqualified)
                 }
@@ -1119,7 +1119,7 @@ recordAccessFunctionExpression =
     ParserFast.symbolFollowedBy "."
         (Tokens.functionNameMapWithRange
             (\range field ->
-                { comments = Rope.empty
+                { comments = SynRope.empty
                 , syntax =
                     Node (range |> rangeMoveStartLeftByOneColumn)
                         (RecordAccessFunction ("." ++ field))
@@ -1141,7 +1141,7 @@ tupledExpressionIfNecessaryFollowedByRecordAccess =
         (ParserFast.oneOf3
             (ParserFast.symbolWithEndLocation ")"
                 (\end ->
-                    { comments = Rope.empty
+                    { comments = SynRope.empty
                     , syntax =
                         Node { start = { row = end.row, column = end.column - 2 }, end = end }
                             UnitExpr
@@ -1157,7 +1157,7 @@ allowedPrefixOperatorFollowedByClosingParensOneOf : Parser (WithComments (Node E
 allowedPrefixOperatorFollowedByClosingParensOneOf =
     ParserFast.whileWithoutLinebreakAnd2PartUtf16ValidateMapWithRangeBacktrackableFollowedBySymbol
         (\operatorRange operator ->
-            { comments = Rope.empty
+            { comments = SynRope.empty
             , syntax =
                 Node
                     { start = { row = operatorRange.start.row, column = operatorRange.start.column - 1 }
@@ -1177,9 +1177,9 @@ tupledExpressionInnerAfterOpeningParens =
         (\rangeAfterOpeningParens commentsBeforeFirstPart firstPart commentsAfterFirstPart tailParts ->
             { comments =
                 commentsBeforeFirstPart
-                    |> Rope.prependTo firstPart.comments
-                    |> Rope.prependTo commentsAfterFirstPart
-                    |> Rope.prependTo tailParts.comments
+                    |> SynRope.prependTo firstPart.comments
+                    |> SynRope.prependTo commentsAfterFirstPart
+                    |> SynRope.prependTo tailParts.comments
             , syntax =
                 case tailParts.syntax of
                     TupledParenthesizedFollowedByRecordAccesses recordAccesses ->
@@ -1234,7 +1234,7 @@ tupledExpressionInnerAfterOpeningParens =
         (ParserFast.oneOf2
             (ParserFast.symbolFollowedBy ")"
                 (multiRecordAccessMap
-                    (\recordAccesses -> { comments = Rope.empty, syntax = TupledParenthesizedFollowedByRecordAccesses recordAccesses })
+                    (\recordAccesses -> { comments = SynRope.empty, syntax = TupledParenthesizedFollowedByRecordAccesses recordAccesses })
                 )
             )
             (ParserFast.symbolFollowedBy ","
@@ -1242,9 +1242,9 @@ tupledExpressionInnerAfterOpeningParens =
                     (\commentsBefore partResult commentsAfter maybeThirdPart ->
                         { comments =
                             commentsBefore
-                                |> Rope.prependTo partResult.comments
-                                |> Rope.prependTo commentsAfter
-                                |> Rope.prependTo maybeThirdPart.comments
+                                |> SynRope.prependTo partResult.comments
+                                |> SynRope.prependTo commentsAfter
+                                |> SynRope.prependTo maybeThirdPart.comments
                         , syntax = TupledTwoOrThree ( partResult.syntax, maybeThirdPart.syntax )
                         }
                     )
@@ -1252,14 +1252,14 @@ tupledExpressionInnerAfterOpeningParens =
                     expression
                     Layout.maybeLayout
                     (ParserFast.oneOf2
-                        (ParserFast.symbol ")" { comments = Rope.empty, syntax = Nothing })
+                        (ParserFast.symbol ")" { comments = SynRope.empty, syntax = Nothing })
                         (ParserFast.symbolFollowedBy ","
                             (ParserFast.map3
                                 (\commentsBefore partResult commentsAfter ->
                                     { comments =
                                         commentsBefore
-                                            |> Rope.prependTo partResult.comments
-                                            |> Rope.prependTo commentsAfter
+                                            |> SynRope.prependTo partResult.comments
+                                            |> SynRope.prependTo commentsAfter
                                     , syntax = Just partResult.syntax
                                     }
                                 )
@@ -1297,7 +1297,7 @@ extendedSubExpressionOptimisticLayout toResult afterCommitting =
         (\extensionRightResult leftNodeWithComments ->
             { comments =
                 leftNodeWithComments.comments
-                    |> Rope.prependTo extensionRightResult.comments
+                    |> SynRope.prependTo extensionRightResult.comments
             , syntax =
                 leftNodeWithComments.syntax
                     |> applyExtensionRight extensionRightResult.syntax
@@ -1396,8 +1396,8 @@ subExpressionMaybeAppliedOptimisticLayout =
         (\leftExpressionResult commentsBeforeExtension maybeArgsReverse ->
             { comments =
                 leftExpressionResult.comments
-                    |> Rope.prependTo commentsBeforeExtension
-                    |> Rope.prependTo maybeArgsReverse.comments
+                    |> SynRope.prependTo commentsBeforeExtension
+                    |> SynRope.prependTo maybeArgsReverse.comments
             , syntax =
                 case maybeArgsReverse.syntax of
                     [] ->
@@ -1419,7 +1419,7 @@ subExpressionMaybeAppliedOptimisticLayout =
         (ParserWithComments.manyWithoutReverse
             (ParserFast.map2
                 (\arg commentsAfter ->
-                    { comments = arg.comments |> Rope.prependTo commentsAfter
+                    { comments = arg.comments |> SynRope.prependTo commentsAfter
                     , syntax = arg.syntax
                     }
                 )
@@ -1466,7 +1466,7 @@ infixLeft leftPrecedence symbol =
             (\commentsBeforeFirst first ->
                 { comments =
                     commentsBeforeFirst
-                        |> Rope.prependTo first.comments
+                        |> SynRope.prependTo first.comments
                 , syntax =
                     ExtendRightByOperation
                         { symbol = symbol
@@ -1496,7 +1496,7 @@ infixNonAssociative leftPrecedence symbol =
     , extensionRight =
         ParserFast.map2
             (\commentsBefore right ->
-                { comments = commentsBefore |> Rope.prependTo right.comments
+                { comments = commentsBefore |> SynRope.prependTo right.comments
                 , syntax =
                     ExtendRightByOperation
                         { symbol = symbol
@@ -1540,7 +1540,7 @@ infixRight leftPrecedence symbol =
             (\commentsBeforeFirst first ->
                 { comments =
                     commentsBeforeFirst
-                        |> Rope.prependTo first.comments
+                        |> SynRope.prependTo first.comments
                 , syntax =
                     ExtendRightByOperation
                         { symbol = symbol

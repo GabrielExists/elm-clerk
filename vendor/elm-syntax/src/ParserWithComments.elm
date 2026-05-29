@@ -8,7 +8,7 @@ module ParserWithComments exposing
 
 import Elm.Syntax.Node exposing (Node)
 import ParserFast exposing (Parser)
-import Rope exposing (Rope)
+import SynRope exposing (Rope)
 
 
 type alias WithComments res =
@@ -24,9 +24,9 @@ until end element =
     ParserFast.loopUntil
         end
         element
-        ( Rope.empty, [] )
+        ( SynRope.empty, [] )
         (\pResult ( commentsSoFar, itemsSoFar ) ->
-            ( commentsSoFar |> Rope.prependTo pResult.comments
+            ( commentsSoFar |> SynRope.prependTo pResult.comments
             , pResult.syntax :: itemsSoFar
             )
         )
@@ -40,9 +40,9 @@ until end element =
 many : Parser (WithComments a) -> Parser (WithComments (List a))
 many p =
     ParserFast.loopWhileSucceeds p
-        ( Rope.empty, [] )
+        ( SynRope.empty, [] )
         (\pResult ( commentsSoFar, itemsSoFar ) ->
-            ( commentsSoFar |> Rope.prependTo pResult.comments
+            ( commentsSoFar |> SynRope.prependTo pResult.comments
             , pResult.syntax :: itemsSoFar
             )
         )
@@ -62,9 +62,9 @@ Mind you the comments will be reversed either way
 manyWithoutReverse : Parser (WithComments a) -> Parser (WithComments (List a))
 manyWithoutReverse p =
     ParserFast.loopWhileSucceeds p
-        ( Rope.empty, [] )
+        ( SynRope.empty, [] )
         (\pResult ( commentsSoFar, itemsSoFar ) ->
-            ( commentsSoFar |> Rope.prependTo pResult.comments
+            ( commentsSoFar |> SynRope.prependTo pResult.comments
             , pResult.syntax :: itemsSoFar
             )
         )

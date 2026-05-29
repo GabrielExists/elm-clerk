@@ -8,7 +8,7 @@ import Elm.Syntax.Range exposing (Range)
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (RecordDefinition, RecordField, TypeAnnotation)
 import ParserFast exposing (Parser)
 import ParserWithComments exposing (WithComments)
-import Rope
+import SynRope
 
 
 typeAnnotation : Parser (WithComments (Node TypeAnnotation))
@@ -17,8 +17,8 @@ typeAnnotation =
         (\inType commentsAfterIn maybeOut ->
             { comments =
                 inType.comments
-                    |> Rope.prependTo commentsAfterIn
-                    |> Rope.prependTo maybeOut.comments
+                    |> SynRope.prependTo commentsAfterIn
+                    |> SynRope.prependTo maybeOut.comments
             , syntax =
                 case maybeOut.syntax of
                     Nothing ->
@@ -34,7 +34,7 @@ typeAnnotation =
             (\commentsAfterArrow typeAnnotationResult ->
                 { comments =
                     commentsAfterArrow
-                        |> Rope.prependTo typeAnnotationResult.comments
+                        |> SynRope.prependTo typeAnnotationResult.comments
                 , syntax = Just typeAnnotationResult.syntax
                 }
             )
@@ -44,7 +44,7 @@ typeAnnotation =
                 )
             )
             (ParserFast.lazy (\() -> typeAnnotation))
-            { comments = Rope.empty, syntax = Nothing }
+            { comments = SynRope.empty, syntax = Nothing }
         )
 
 
@@ -72,7 +72,7 @@ parensTypeAnnotation =
         (ParserFast.oneOf2
             (ParserFast.symbolWithEndLocation ")"
                 (\end ->
-                    { comments = Rope.empty
+                    { comments = SynRope.empty
                     , syntax =
                         Node
                             { start = { row = end.row, column = end.column - 2 }
@@ -86,9 +86,9 @@ parensTypeAnnotation =
                 (\rangeAfterOpeningParens commentsBeforeFirstPart firstPart commentsAfterFirstPart lastToSecondPart ->
                     { comments =
                         commentsBeforeFirstPart
-                            |> Rope.prependTo firstPart.comments
-                            |> Rope.prependTo commentsAfterFirstPart
-                            |> Rope.prependTo lastToSecondPart.comments
+                            |> SynRope.prependTo firstPart.comments
+                            |> SynRope.prependTo commentsAfterFirstPart
+                            |> SynRope.prependTo lastToSecondPart.comments
                     , syntax =
                         Node
                             { start = { row = rangeAfterOpeningParens.start.row, column = rangeAfterOpeningParens.start.column - 1 }
@@ -121,15 +121,15 @@ parensTypeAnnotation =
                 Layout.maybeLayout
                 (ParserFast.oneOf2
                     (ParserFast.symbol ")"
-                        { comments = Rope.empty, syntax = Nothing }
+                        { comments = SynRope.empty, syntax = Nothing }
                     )
                     (ParserFast.symbolFollowedBy ","
                         (ParserFast.map4
                             (\commentsBefore secondPartResult commentsAfter maybeThirdPartResult ->
                                 { comments =
                                     commentsBefore
-                                        |> Rope.prependTo secondPartResult.comments
-                                        |> Rope.prependTo commentsAfter
+                                        |> SynRope.prependTo secondPartResult.comments
+                                        |> SynRope.prependTo commentsAfter
                                 , syntax = Just { maybeThirdPart = maybeThirdPartResult.syntax, secondPart = secondPartResult.syntax }
                                 }
                             )
@@ -138,15 +138,15 @@ parensTypeAnnotation =
                             Layout.maybeLayout
                             (ParserFast.oneOf2
                                 (ParserFast.symbol ")"
-                                    { comments = Rope.empty, syntax = Nothing }
+                                    { comments = SynRope.empty, syntax = Nothing }
                                 )
                                 (ParserFast.symbolFollowedBy ","
                                     (ParserFast.map3
                                         (\commentsBefore thirdPartResult commentsAfter ->
                                             { comments =
                                                 commentsBefore
-                                                    |> Rope.prependTo thirdPartResult.comments
-                                                    |> Rope.prependTo commentsAfter
+                                                    |> SynRope.prependTo thirdPartResult.comments
+                                                    |> SynRope.prependTo commentsAfter
                                             , syntax = Just thirdPartResult.syntax
                                             }
                                         )
@@ -168,7 +168,7 @@ genericTypeAnnotation : Parser (WithComments (Node TypeAnnotation))
 genericTypeAnnotation =
     Tokens.functionNameMapWithRange
         (\range var ->
-            { comments = Rope.empty
+            { comments = SynRope.empty
             , syntax =
                 Node range (TypeAnnotation.GenericType var)
             }
@@ -181,7 +181,7 @@ recordTypeAnnotation =
         (\range commentsBefore afterCurly ->
             { comments =
                 commentsBefore
-                    |> Rope.prependTo afterCurly.comments
+                    |> SynRope.prependTo afterCurly.comments
             , syntax =
                 case afterCurly.syntax of
                     Nothing ->
@@ -197,7 +197,7 @@ recordTypeAnnotation =
                 (\firstNameNode commentsAfterFirstName afterFirstName ->
                     { comments =
                         commentsAfterFirstName
-                            |> Rope.prependTo afterFirstName.comments
+                            |> SynRope.prependTo afterFirstName.comments
                     , syntax =
                         Just
                             (case afterFirstName.syntax of
@@ -217,8 +217,8 @@ recordTypeAnnotation =
                             (\range commentsBefore head tail ->
                                 { comments =
                                     commentsBefore
-                                        |> Rope.prependTo head.comments
-                                        |> Rope.prependTo tail.comments
+                                        |> SynRope.prependTo head.comments
+                                        |> SynRope.prependTo tail.comments
                                 , syntax =
                                     RecordExtensionExpressionAfterName
                                         (Node range (head.syntax :: tail.syntax))
@@ -230,7 +230,7 @@ recordTypeAnnotation =
                                 (ParserFast.symbolFollowedBy ","
                                     (ParserFast.map2
                                         (\commentsBefore field ->
-                                            { comments = commentsBefore |> Rope.prependTo field.comments
+                                            { comments = commentsBefore |> SynRope.prependTo field.comments
                                             , syntax = field.syntax
                                             }
                                         )
@@ -246,9 +246,9 @@ recordTypeAnnotation =
                             (\commentsBeforeFirstFieldValue firstFieldValue commentsAfterFirstFieldValue tailFields ->
                                 { comments =
                                     commentsBeforeFirstFieldValue
-                                        |> Rope.prependTo firstFieldValue.comments
-                                        |> Rope.prependTo commentsAfterFirstFieldValue
-                                        |> Rope.prependTo tailFields.comments
+                                        |> SynRope.prependTo firstFieldValue.comments
+                                        |> SynRope.prependTo commentsAfterFirstFieldValue
+                                        |> SynRope.prependTo tailFields.comments
                                 , syntax =
                                     FieldsAfterName
                                         { firstFieldValue = firstFieldValue.syntax
@@ -261,14 +261,14 @@ recordTypeAnnotation =
                             Layout.maybeLayout
                             (ParserFast.orSucceed
                                 (ParserFast.symbolFollowedBy "," recordFieldsTypeAnnotation)
-                                { comments = Rope.empty, syntax = [] }
+                                { comments = SynRope.empty, syntax = [] }
                             )
                         )
                     )
                 )
                 |> ParserFast.followedBySymbol "}"
             )
-            (ParserFast.symbol "}" { comments = Rope.empty, syntax = Nothing })
+            (ParserFast.symbol "}" { comments = SynRope.empty, syntax = Nothing })
         )
 
 
@@ -288,8 +288,8 @@ recordFieldsTypeAnnotation =
         (\commentsBefore head tail ->
             { comments =
                 commentsBefore
-                    |> Rope.prependTo head.comments
-                    |> Rope.prependTo tail.comments
+                    |> SynRope.prependTo head.comments
+                    |> SynRope.prependTo tail.comments
             , syntax = head.syntax :: tail.syntax
             }
         )
@@ -299,7 +299,7 @@ recordFieldsTypeAnnotation =
             (ParserFast.symbolFollowedBy ","
                 (ParserFast.map2
                     (\commentsBefore field ->
-                        { comments = commentsBefore |> Rope.prependTo field.comments
+                        { comments = commentsBefore |> SynRope.prependTo field.comments
                         , syntax = field.syntax
                         }
                     )
@@ -316,10 +316,10 @@ recordFieldDefinition =
         (\range commentsBeforeFunctionName name commentsAfterFunctionName commentsAfterColon value commentsAfterValue ->
             { comments =
                 commentsBeforeFunctionName
-                    |> Rope.prependTo commentsAfterFunctionName
-                    |> Rope.prependTo commentsAfterColon
-                    |> Rope.prependTo value.comments
-                    |> Rope.prependTo commentsAfterValue
+                    |> SynRope.prependTo commentsAfterFunctionName
+                    |> SynRope.prependTo commentsAfterColon
+                    |> SynRope.prependTo value.comments
+                    |> SynRope.prependTo commentsAfterValue
             , syntax = Node range ( name, value.syntax )
             }
         )
@@ -347,7 +347,7 @@ typedTypeAnnotationWithoutArguments =
                         Just ( qualificationAfterStartName, unqualified ) ->
                             ( startName :: qualificationAfterStartName, unqualified )
             in
-            { comments = Rope.empty
+            { comments = SynRope.empty
             , syntax =
                 Node range
                     (TypeAnnotation.Typed (Node range name) [])
@@ -389,7 +389,7 @@ typedTypeAnnotationWithArgumentsOptimisticLayout =
             in
             { comments =
                 commentsAfterName
-                    |> Rope.prependTo argsReverse.comments
+                    |> SynRope.prependTo argsReverse.comments
             , syntax =
                 Node range (TypeAnnotation.Typed nameNode (List.reverse argsReverse.syntax))
             }
@@ -418,7 +418,7 @@ typedTypeAnnotationWithArgumentsOptimisticLayout =
                     (\typeAnnotationResult commentsAfter ->
                         { comments =
                             typeAnnotationResult.comments
-                                |> Rope.prependTo commentsAfter
+                                |> SynRope.prependTo commentsAfter
                         , syntax = typeAnnotationResult.syntax
                         }
                     )

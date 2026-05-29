@@ -1,4 +1,4 @@
-module Rope exposing (Rope, RopeFilled(..), empty, filledPrependTo, one, prependTo, prependToFilled, toList)
+module SynRope exposing (Rope, RopeFilled(..), empty, filledPrependTo, one, prependTo, prependToFilled, toList)
 
 {-| inspired by [miniBill/elm-rope](https://dark.elm.dmy.fr/packages/miniBill/elm-rope/latest/)
 -}
