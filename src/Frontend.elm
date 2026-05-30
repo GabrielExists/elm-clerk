@@ -415,7 +415,7 @@ viewSection section =
         syntaxHighlight : String -> Html.Html msg
         syntaxHighlight code =
             Element.layout []
-                (Source.view []
+                (Source.viewExpression []
                     { highlight = Nothing
                     , buttons = []
                     , source = code
