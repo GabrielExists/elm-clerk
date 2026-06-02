@@ -7,13 +7,38 @@ import Rope
 import Types exposing (FrontendMsg)
 
 
-add : Int -> Int -> Int
-add first second =
-    (10 * first) + second
+applied =
+    repeat '[' ']' 4 "Word"
 
 
-plusTen =
-    add 1
+applied2 =
+    repeatParen 5 "Bird"
+
+
+repeat : Char -> Char -> Int -> String -> String
+repeat front end repetitions body =
+    String.fromChar front ++ String.repeat repetitions body ++ String.fromChar end
+
+
+repeatParen : Int -> String -> String
+repeatParen =
+    repeat '(' ')'
+
+
+repeatBrace : Int -> String
+repeatBrace =
+    repeat '{' '}'
+
+
+
+--add : Int -> Int -> Int
+--add first second =
+--    (10 * first) + second
+--
+--
+--plusTen : Int -> Int
+--plusTen =
+--    add 1
 
 
 myMaybe =

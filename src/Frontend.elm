@@ -3,37 +3,28 @@ module Frontend exposing (..)
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation as Nav
 import Dict exposing (Dict)
-import Element exposing (Attribute, Element, fill, padding, paddingEach, px, width)
+import Element exposing (Attribute, Element, fill, paddingEach, px, width)
 import Element.Background
-import Element.Border
 import Element.Font as Font
-import Element.Region
-import Elm.Interface exposing (Exposed)
 import Elm.Parser
 import Elm.Parser.Comments
 import Elm.Parser.Declarations
-import Elm.Parser.File
 import Elm.Syntax.Declaration exposing (Declaration(..))
 import Elm.Syntax.Expression exposing (Expression(..))
-import Elm.Syntax.File as File exposing (File)
-import Elm.Syntax.ModuleName exposing (ModuleName)
+import Elm.Syntax.File exposing (File)
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Pattern exposing (Pattern(..))
 import Elm.Syntax.Signature exposing (Signature)
 import Elm.Syntax.TypeAnnotation exposing (TypeAnnotation(..))
-import Eval
 import Eval.Expression
 import Eval.Module
 import Html
-import Html.Attributes as Attr
 import Http exposing (stringBody)
 import IntTypes exposing (CallTree, Env, Error(..), Value(..))
-import Json.Encode as Json
 import Kernel
 import Kernel.Html
 import Lamdera exposing (sendToBackend)
 import List.Extra
-import Markdown.Html
 import Markdown.Parser
 import Markdown.Renderer
 import Markdown.Renderer.ElmUi
@@ -41,8 +32,7 @@ import Parser exposing (DeadEnd)
 import ParserFast
 import ParserWithComments exposing (WithComments)
 import Regex
-import Rope exposing (Rope)
-import ToString exposing (deadEndsToStrings, evalErrorKindToString, functionDeclarationToString)
+import ToString exposing (deadEndsToStrings, evalErrorKindToString, functionDeclarationToString, patternToString)
 import Types exposing (..)
 import UI.Source as Source
 import Url
@@ -137,6 +127,10 @@ updateFromBackend msg model =
             ( model, Cmd.none )
 
 
+
+-- PARSING AND EVALUATION
+
+
 parse : String -> List String
 parse source =
     case Elm.Parser.parseToFile source of
@@ -183,7 +177,7 @@ type Cell
     | CellDeclaration (Node Declaration)
 
 
-parseSection : FrontendModel -> MaybeEnv -> String -> Section
+parseSection : FrontendModel -> Result Error Env -> String -> Section
 parseSection model maybeEnv source =
     let
         parser : ParserFast.Parser (List Cell)
@@ -231,68 +225,23 @@ parseSection model maybeEnv source =
                     case lastCode of
                         Just (CellDeclaration (Node _ declaration)) ->
                             let
-                                ( expressionName, maybeTypeAnnotation ) =
+                                expressionName =
                                     extractNameFromDeclaration declaration
 
                                 evaluated : Result String Value
                                 evaluated =
                                     evaluateName maybeEnv expressionName
                             in
-                            case ( evaluated, maybeTypeAnnotation ) of
-                                ( Err error, _ ) ->
+                            case evaluated of
+                                Err error ->
                                     EvaluatedSection source error
 
                                 --PartiallyApplied Env (List Value) (List (Node Pattern)) (Maybe QualifiedNameRef) (Node Expression)
-                                ( Ok ((PartiallyApplied env values patterns maybeName expression) as functionDeclaration), typeAnnotation ) ->
-                                    let
-                                        parameterNames : List String
-                                        parameterNames =
-                                            [ "first", "second" ]
+                                Ok ((PartiallyApplied env values patterns maybeName expression) as functionDeclaration) ->
+                                    handlePartiallyApplied source functionDeclaration declaration
 
-                                        functionOutput : Result String Value
-                                        functionOutput =
-                                            --let
-                                            --zipped = List.map2 Tuple.pair parameterNames model.interactiveValues
-                                            --mapFunction key value =
-                                            --    value |> List.map
-                                            --newEnv : Env
-                                            --newEnv =
-                                            --    { env
-                                            --        | values = Dict.union (model.interactiveValues |> Dict.map (\key value ->
-                                            --            let a : FrontendModel -> MaybeEnv -> String -> Section
-                                            --            a = value in
-                                            --, interactiveValues : Dict String (List IntTypes.Value)
-                                            --                                                        a
-                                            --                                                    ) env.values
-                                            --                                                }
-                                            --                                        in
-                                            evaluate (Ok env) expression
-
-                                        functionDeclarationElement : Element msg
-                                        functionDeclarationElement =
-                                            functionDeclaration
-                                                |> functionDeclarationToString
-                                                |> viewOutput
-                                    in
-                                    case functionOutput of
-                                        Ok functionOutputOk ->
-                                            --EvaluatedSection source (functionDeclarationToString functionDeclaration)
-                                            InteractiveSection source
-                                                [ functionDeclarationElement ]
-                                                (Value.toString functionOutputOk)
-
-                                        Err functionOutputError ->
-                                            --EvaluatedSection source (functionDeclarationToString functionDeclaration)
-                                            InteractiveSection source [ functionDeclarationElement ] functionOutputError
-
-                                ( Ok value, _ ) ->
-                                    case Kernel.html.fromValue value of
-                                        Just html ->
-                                            Kernel.Html.htmlToReal html
-                                                |> HtmlSection source
-
-                                        _ ->
-                                            EvaluatedSection source (Value.toString value)
+                                Ok value ->
+                                    handleSuccessfulParse source value
 
                         --EvaluatedSection source evaluated
                         _ ->
@@ -323,8 +272,188 @@ parseSection model maybeEnv source =
     handleOutput output
 
 
-type alias MaybeEnv =
-    Result Error Env
+annotationToStrings : TypeAnnotation -> List String
+annotationToStrings typeAnnotation =
+    let
+        unpackAnnotation : TypeAnnotation -> List String
+        unpackAnnotation annotation =
+            case annotation of
+                Typed (Node _ ( moduleName, name )) children ->
+                    [ String.join "." (moduleName ++ [ name ]) ]
+                        ++ (children
+                                |> List.map Node.value
+                                |> List.concatMap unpackAnnotation
+                           )
+
+                FunctionTypeAnnotation first second ->
+                    (first |> Node.value |> unpackAnnotation)
+                        ++ (second |> Node.value |> unpackAnnotation)
+
+                _ ->
+                    [ "Other" ]
+    in
+    unpackAnnotation typeAnnotation
+
+
+declarationArguments : Declaration -> Maybe (List Pattern)
+declarationArguments declaration =
+    case declaration of
+        FunctionDeclaration function ->
+            function
+                |> .declaration
+                |> Node.value
+                |> .arguments
+                |> List.map Node.value
+                |> Just
+
+        _ ->
+            Nothing
+
+
+declarationTypeAnnotation : Declaration -> Maybe TypeAnnotation
+declarationTypeAnnotation declaration =
+    case declaration of
+        FunctionDeclaration function ->
+            function
+                |> .signature
+                |> Maybe.map Node.value
+                |> Maybe.map .typeAnnotation
+                |> Maybe.map Node.value
+
+        _ ->
+            Nothing
+
+
+parseTogetherExperiment : Declaration -> List Pattern -> List a -> String
+parseTogetherExperiment declaration evalPatterns alreadyApplied =
+    let
+        arguments : Maybe (List Pattern)
+        arguments =
+            declarationArguments declaration
+
+        annotations : List String
+        annotations =
+            declarationTypeAnnotation declaration
+                |> Maybe.map annotationToStrings
+                |> Maybe.withDefault []
+
+        relevantPatterns : List String
+        relevantPatterns =
+            evalPatterns
+                |> List.drop (List.length alreadyApplied)
+                |> List.map patternToString
+
+        pairs : List ( String, String )
+        pairs =
+            List.map2
+                Tuple.pair
+                relevantPatterns
+                annotations
+    in
+    (if Maybe.withDefault [] arguments == evalPatterns then
+        "Equal"
+
+     else
+        "Not equal"
+    )
+        ++ "\n"
+        ++ (if List.length pairs == List.length evalPatterns then
+                "length pairs == evalPatterns"
+
+            else
+                "length pairs != evalPatterns"
+           )
+        ++ "\n"
+        ++ (if List.length pairs == List.length annotations - 1 then
+                "Annotations seem correct"
+
+            else
+                "Annotations seem wrong"
+           )
+        ++ "\n Patterns from Eval:\n"
+        ++ (evalPatterns
+                |> List.map patternToString
+                |> String.join ", "
+           )
+        ++ "\n Patterns from syntax:\n"
+        ++ (arguments
+                |> Maybe.withDefault []
+                |> List.map patternToString
+                |> String.join ", "
+           )
+        ++ "\n Type annotations:\n"
+        ++ (annotations
+                |> String.join ", "
+           )
+        ++ "\n"
+        ++ (pairs
+                |> List.map (\( first, second ) -> first ++ ": " ++ second)
+                |> String.join "\n"
+           )
+
+
+handlePartiallyApplied : String -> Value -> Declaration -> Section
+handlePartiallyApplied source functionDeclaration declaration =
+    case functionDeclaration of
+        PartiallyApplied env values patterns maybeName expression ->
+            let
+                together =
+                    parseTogetherExperiment declaration (patterns |> List.map Node.value) values
+
+                parameterNames : List String
+                parameterNames =
+                    [ "first", "second" ]
+
+                functionOutput : Result String Value
+                functionOutput =
+                    --let
+                    --zipped = List.map2 Tuple.pair parameterNames model.interactiveValues
+                    --mapFunction key value =
+                    --    value |> List.map
+                    --newEnv : Env
+                    --newEnv =
+                    --    { env
+                    --        | values = Dict.union (model.interactiveValues |> Dict.map (\key value ->
+                    --            let a : FrontendModel -> MaybeEnv -> String -> Section
+                    --            a = value in
+                    --, interactiveValues : Dict String (List IntTypes.Value)
+                    --                                                        a
+                    --                                                    ) env.values
+                    --                                                }
+                    --                                        in
+                    evaluate (Ok env) expression
+
+                debugElements : List (Element msg)
+                debugElements =
+                    [ functionDeclaration
+                        |> functionDeclarationToString
+                        |> viewOutput
+                    , viewOutput together
+                    ]
+            in
+            case functionOutput of
+                Ok functionOutputOk ->
+                    --EvaluatedSection source (functionDeclarationToString functionDeclaration)
+                    InteractiveSection source
+                        debugElements
+                        (Value.toString functionOutputOk)
+
+                Err functionOutputError ->
+                    --EvaluatedSection source (functionDeclarationToString functionDeclaration)
+                    InteractiveSection source debugElements functionOutputError
+
+        _ ->
+            ErrorSection [ "Called handlePartiallyApplied with a declaration that was not a function" ]
+
+
+handleSuccessfulParse source value =
+    case Kernel.html.fromValue value of
+        Just html ->
+            Kernel.Html.htmlToReal html
+                |> HtmlSection source
+
+        _ ->
+            EvaluatedSection source (Value.toString value)
 
 
 makeEnv : String -> Result Error Env
@@ -402,7 +531,7 @@ evaluate maybeEnv expressionNode =
     module_run |> Result.mapError error_to_string
 
 
-extractNameFromDeclaration : Declaration -> ( String, List String )
+extractNameFromDeclaration : Declaration -> String
 extractNameFromDeclaration declaration =
     case declaration of
         FunctionDeclaration function ->
@@ -414,54 +543,27 @@ extractNameFromDeclaration declaration =
                         |> Node.value
                         |> .name
                         |> Node.value
-
-                typeAnnotation : Maybe TypeAnnotation
-                typeAnnotation =
-                    function
-                        |> .signature
-                        |> Maybe.map Node.value
-                        |> Maybe.map .typeAnnotation
-                        |> Maybe.map Node.value
-
-                unpackAnnotation : TypeAnnotation -> List String
-                unpackAnnotation annotation =
-                    case annotation of
-                        Typed (Node _ ( moduleName, name )) children ->
-                            [ String.join "." (moduleName ++ [ name ]) ]
-                                ++ (children
-                                        |> List.map Node.value
-                                        |> List.concatMap unpackAnnotation
-                                   )
-
-                        FunctionTypeAnnotation first second ->
-                            (first |> Node.value |> unpackAnnotation)
-                                ++ (second |> Node.value |> unpackAnnotation)
-
-                        _ ->
-                            [ "Other" ]
-
-                typeAnnotationList : List String
-                typeAnnotationList =
-                    typeAnnotation
-                        |> Maybe.map unpackAnnotation
-                        |> Maybe.withDefault []
             in
-            ( expressionName, typeAnnotationList )
+            expressionName
 
         AliasDeclaration typeAlias ->
-            ( "typealias", [] )
+            "typealias"
 
         CustomTypeDeclaration type_ ->
-            ( "customtype", [] )
+            "customtype"
 
         PortDeclaration signature ->
-            ( "portdeclaration", [] )
+            "portdeclaration"
 
         InfixDeclaration infix_ ->
-            ( "infixdeclaration", [] )
+            "infixdeclaration"
 
         Destructuring node1 node2 ->
-            ( "destructuring", [] )
+            "destructuring"
+
+
+
+-- VIEW
 
 
 view : Model -> Browser.Document FrontendMsg
