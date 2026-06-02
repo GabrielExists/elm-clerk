@@ -2,10 +2,75 @@ module ToString exposing (..)
 
 import Elm.Syntax.Expression exposing (Expression(..))
 import Elm.Syntax.Node as Node exposing (Node(..))
-import Elm.Syntax.Pattern exposing (Pattern(..))
+import Elm.Syntax.Pattern exposing (Pattern(..), QualifiedNameRef)
 import IntTypes exposing (Value(..))
 import Parser exposing (DeadEnd)
 import Value
+
+
+listToString : String -> List String -> String
+listToString name list =
+    name ++ " [" ++ String.join ", " list ++ "]"
+
+
+listToStringParen : String -> List String -> String
+listToStringParen name list =
+    name ++ " (" ++ String.join ", " list ++ ")"
+
+
+qualifiedNameRefToString : QualifiedNameRef -> String
+qualifiedNameRefToString name =
+    name.moduleName
+        ++ [ name.name ]
+        |> String.join "."
+
+
+functionDeclarationToString : Value -> String
+functionDeclarationToString value =
+    case value of
+        PartiallyApplied env values patterns maybeName (Node _ expression) ->
+            [ "  Already applied:" ]
+                ++ (values
+                        |> List.map Value.toString
+                   )
+                ++ [ "  Pattern:" ]
+                ++ (patterns
+                        |> List.map Node.value
+                        |> List.map patternToString
+                   )
+                ++ [ "  Name:" ]
+                ++ (case maybeName of
+                        Just name ->
+                            name.moduleName
+                                ++ [ name.name ]
+                                |> String.join "."
+                                |> List.singleton
+
+                        Nothing ->
+                            [ "" ]
+                   )
+                ++ [ " Expression:" ]
+                ++ [ expressionToString expression ]
+                |> String.join "\n"
+
+        _ ->
+            ""
+
+
+evalErrorKindToString : IntTypes.EvalErrorKind -> String
+evalErrorKindToString errorKind =
+    case errorKind of
+        IntTypes.TypeError string ->
+            "TypeError: " ++ string
+
+        IntTypes.Unsupported string ->
+            "Unsupported: " ++ string
+
+        IntTypes.NameError string ->
+            "NameError: " ++ string
+
+        IntTypes.Todo string ->
+            "Todo: " ++ string
 
 
 deadEndsToStrings : List DeadEnd -> List String
@@ -73,44 +138,73 @@ patternToString pattern =
         UnitPattern ->
             "UnitPattern"
 
-        CharPattern _ ->
-            "Charpattern"
+        CharPattern char ->
+            "CharPattern " ++ String.fromChar char
 
-        StringPattern _ ->
-            "Stringpattern"
+        StringPattern string ->
+            "StringPattern " ++ string
 
-        IntPattern _ ->
-            "Intpattern"
+        IntPattern int ->
+            "IntPattern " ++ String.fromInt int
 
-        HexPattern _ ->
-            "hexpattern"
+        HexPattern hex ->
+            "HexPattern " ++ String.fromInt hex
 
-        FloatPattern _ ->
-            "floatpattern"
+        FloatPattern float ->
+            "FloatPattern " ++ String.fromFloat float
 
-        TuplePattern _ ->
-            "tuplepattern"
+        TuplePattern patterns ->
+            patterns
+                |> List.map Node.value
+                |> List.map patternToString
+                |> listToStringParen "TuplePattern"
 
-        RecordPattern _ ->
-            "recordpattern"
+        RecordPattern record ->
+            record
+                |> List.map Node.value
+                |> listToString "RecordPattern"
 
-        UnConsPattern _ _ ->
-            "unconspattern"
+        UnConsPattern first second ->
+            "UnConsPattern"
+                ++ (first
+                        |> Node.value
+                        |> patternToString
+                   )
+                ++ " "
+                ++ (second
+                        |> Node.value
+                        |> patternToString
+                   )
 
-        ListPattern _ ->
-            "listpattern"
+        ListPattern list ->
+            list
+                |> List.map Node.value
+                |> List.map patternToString
+                |> listToStringParen "ListPattern"
 
         VarPattern name ->
             "VarPattern: " ++ name
 
-        NamedPattern _ _ ->
-            "namedpattern"
+        NamedPattern name list ->
+            "NamedPattern"
+                ++ qualifiedNameRefToString name
+                ++ (list
+                        |> List.map Node.value
+                        |> List.map patternToString
+                        |> listToStringParen ""
+                   )
 
-        AsPattern _ _ ->
-            "aspattern"
+        AsPattern first second ->
+            "AsPattern"
+                ++ (first
+                        |> Node.value
+                        |> patternToString
+                   )
+                ++ " "
+                ++ (second |> Node.value)
 
-        ParenthesizedPattern _ ->
-            "parenpattern"
+        ParenthesizedPattern inner ->
+            "ParenPattern (" ++ (inner |> Node.value |> patternToString) ++ ")"
 
 
 expressionToString expression =
@@ -119,13 +213,10 @@ expressionToString expression =
             "Unit"
 
         Application expressions ->
-            "Application ["
-                ++ (expressions
-                        |> List.map Node.value
-                        |> List.map expressionToString
-                        |> String.join ", "
-                   )
-                ++ "]"
+            expressions
+                |> List.map Node.value
+                |> List.map expressionToString
+                |> listToString "Application"
 
         OperatorApplication _ _ _ _ ->
             "OperatorApplication"
@@ -192,51 +283,3 @@ expressionToString expression =
 
         GLSLExpression _ ->
             "GLSL"
-
-
-functionDeclarationToString : Value -> String
-functionDeclarationToString value =
-    case value of
-        PartiallyApplied env values patterns maybeName (Node _ expression) ->
-            [ "  Already applied:" ]
-                ++ (values
-                        |> List.map Value.toString
-                   )
-                ++ [ "  Pattern:" ]
-                ++ (patterns
-                        |> List.map Node.value
-                        |> List.map patternToString
-                   )
-                ++ [ "  Name:" ]
-                ++ (case maybeName of
-                        Just name ->
-                            name.moduleName
-                                ++ [ name.name ]
-                                |> String.join "."
-                                |> List.singleton
-
-                        Nothing ->
-                            [ "" ]
-                   )
-                ++ [ " Expression:" ]
-                ++ [ expressionToString expression ]
-                |> String.join "\n"
-
-        _ ->
-            ""
-
-
-evalErrorKindToString : IntTypes.EvalErrorKind -> String
-evalErrorKindToString errorKind =
-    case errorKind of
-        IntTypes.TypeError string ->
-            "TypeError: " ++ string
-
-        IntTypes.Unsupported string ->
-            "Unsupported: " ++ string
-
-        IntTypes.NameError string ->
-            "NameError: " ++ string
-
-        IntTypes.Todo string ->
-            "Todo: " ++ string
