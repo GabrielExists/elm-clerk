@@ -1,4 +1,4 @@
-module Frontend exposing (..)
+module Frontend exposing (Cell(..), Model, app)
 
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation as Nav
@@ -6,22 +6,20 @@ import Dict exposing (Dict)
 import Element exposing (Attribute, Element, fill, paddingEach, px, width)
 import Element.Background
 import Element.Font as Font
-import Element.Input
 import Elm.Parser
 import Elm.Parser.Comments
 import Elm.Parser.Declarations
 import Elm.Syntax.Declaration exposing (Declaration(..))
-import Elm.Syntax.Expression exposing (Expression(..))
+import Elm.Syntax.Expression exposing (Expression)
 import Elm.Syntax.File exposing (File)
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Pattern exposing (Pattern(..))
-import Elm.Syntax.Signature exposing (Signature)
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
 import Eval.Expression
 import Eval.Module
 import Html
 import Http exposing (stringBody)
-import IntTypes exposing (CallTree, Env, Error(..), Value(..))
+import IntTypes exposing (Env, Error(..), Value(..))
 import Kernel
 import Kernel.Html
 import Lamdera exposing (sendToBackend)
@@ -31,11 +29,10 @@ import Markdown.Renderer
 import Markdown.Renderer.ElmUi
 import Parser exposing (DeadEnd)
 import ParserFast
-import ParserWithComments exposing (WithComments)
 import Regex
 import Result.Extra
-import ToString exposing (annotationToString, annotationToStringsDebug, deadEndsToStrings, evalErrorKindToString, functionDeclarationToString, patternToString, patternToStringDebug)
-import Types exposing (..)
+import ToString exposing (annotationToString, deadEndsToStrings, evalErrorKindToString, patternToStringDebug)
+import Types exposing (FrontendModel, FrontendMsg(..), Section(..), ToBackend(..), ToFrontend(..))
 import UI.Source as Source
 import Url
 import Value
@@ -52,13 +49,13 @@ app =
         , onUrlChange = UrlChanged
         , update = update
         , updateFromBackend = updateFromBackend
-        , subscriptions = \m -> Sub.none
+        , subscriptions = \_ -> Sub.none
         , view = view
         }
 
 
 init : Url.Url -> Nav.Key -> ( Model, Cmd FrontendMsg )
-init url key =
+init _ key =
     ( { key = key
       , message = "Welcome to Lamdera! You're looking at the auto-generated base implementation. Check out src/Frontend.elm to start coding! "
       , source = ""
@@ -87,7 +84,7 @@ update msg model =
                     , Nav.load url
                     )
 
-        UrlChanged url ->
+        UrlChanged _ ->
             ( model, Cmd.none )
 
         NoOpFrontendMsg ->
@@ -112,7 +109,7 @@ update msg model =
                         ]
                     )
 
-                Err error ->
+                Err _ ->
                     ( model, Cmd.none )
 
         WroteText _ ->
@@ -136,7 +133,7 @@ updateFromBackend msg model =
 parse : String -> List String
 parse source =
     case Elm.Parser.parseToFile source of
-        Ok file ->
+        Ok _ ->
             [ "Ok" ]
 
         Err deadEnds ->
@@ -158,7 +155,7 @@ sectionsFromSource model source =
     Regex.split newSectionRegex
         source
         --|> List.map (\x -> "\"" ++ x ++ "\"")
-        |> List.map (parseSection model maybeEnv)
+        |> List.map (parseSection maybeEnv)
         |> (\list ->
                 case maybeEnv of
                     Err (ParsingError deadEnds) ->
@@ -179,8 +176,8 @@ type Cell
     | CellDeclaration (Node Declaration)
 
 
-parseSection : FrontendModel -> Result Error Env -> String -> Section
-parseSection model maybeEnv source =
+parseSection : Result Error Env -> String -> Section
+parseSection maybeEnv source =
     let
         parser : ParserFast.Parser (List Cell)
         parser =
@@ -401,7 +398,7 @@ findTypeNode ( binding, key ) =
 handlePartiallyApplied : String -> Value -> Declaration -> Section
 handlePartiallyApplied source partiallyApplied declaration =
     case partiallyApplied of
-        PartiallyApplied env values patterns maybeName expression ->
+        PartiallyApplied env values patterns _ expression ->
             let
                 maybePairs : Result String (List ( String, String ))
                 maybePairs =
@@ -480,12 +477,8 @@ makeEnv source =
         fileMappedError : Result Error File
         fileMappedError =
             Result.mapError ParsingError file
-
-        maybeEnv : Result Error Env
-        maybeEnv =
-            Result.andThen Eval.Module.buildInitialEnv fileMappedError
     in
-    maybeEnv
+    Result.andThen Eval.Module.buildInitialEnv fileMappedError
 
 
 evaluateName : Result Error Env -> String -> Result String Value
@@ -545,30 +538,25 @@ extractNameFromDeclaration : Declaration -> String
 extractNameFromDeclaration declaration =
     case declaration of
         FunctionDeclaration function ->
-            let
-                expressionName : String
-                expressionName =
-                    function
-                        |> .declaration
-                        |> Node.value
-                        |> .name
-                        |> Node.value
-            in
-            expressionName
+            function
+                |> .declaration
+                |> Node.value
+                |> .name
+                |> Node.value
 
-        AliasDeclaration typeAlias ->
+        AliasDeclaration _ ->
             "typealias"
 
-        CustomTypeDeclaration type_ ->
+        CustomTypeDeclaration _ ->
             "customtype"
 
-        PortDeclaration signature ->
+        PortDeclaration _ ->
             "portdeclaration"
 
-        InfixDeclaration infix_ ->
+        InfixDeclaration _ ->
             "infixdeclaration"
 
-        Destructuring node1 node2 ->
+        Destructuring _ _ ->
             "destructuring"
 
 
@@ -594,8 +582,8 @@ view model =
             (Element.column
                 -- left could be 185
                 [ Element.alignLeft, Element.paddingEach { top = 40, left = 40, right = 40, bottom = 0 } ]
-                ([ Element.image [ width (px 150), Element.centerX ] { src = "https://lamdera.app/lamdera-logo-black.png", description = "Lamdera logo" } ]
-                    ++ List.map viewSection model.sections
+                (Element.image [ width (px 150), Element.centerX ] { src = "https://lamdera.app/lamdera-logo-black.png", description = "Lamdera logo" }
+                    :: List.map viewSection model.sections
                 )
             )
         ]

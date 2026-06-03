@@ -1,4 +1,4 @@
-module ToString exposing (..)
+module ToString exposing (annotationToString, deadEndsToStrings, evalErrorKindToString, patternToStringDebug)
 
 import Elm.Syntax.Expression exposing (Expression(..))
 import Elm.Syntax.Node as Node exposing (Node(..))
@@ -34,9 +34,9 @@ qualifiedNameRefToString name =
 functionDeclarationToString : Value -> String
 functionDeclarationToString value =
     case value of
-        PartiallyApplied env values patterns maybeName (Node _ expression) ->
-            [ "  Already applied:" ]
-                ++ (values
+        PartiallyApplied _ values patterns maybeName (Node _ expression) ->
+            "  Already applied:"
+                :: (values
                         |> List.map Value.toString
                    )
                 ++ [ "  Pattern:" ]
@@ -143,8 +143,8 @@ annotationToStringsDebug annotation =
             [ "Generic " ++ a ]
 
         TypeAnnotation.Typed (Node _ ( moduleName, name )) children ->
-            [ String.join "." (moduleName ++ [ name ]) ]
-                ++ (children
+            String.join "." (moduleName ++ [ name ])
+                :: (children
                         |> List.map Node.value
                         |> List.concatMap annotationToStringsDebug
                    )

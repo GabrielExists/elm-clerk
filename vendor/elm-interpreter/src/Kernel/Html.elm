@@ -1,4 +1,4 @@
-module Kernel.Html exposing (..)
+module Kernel.Html exposing (Attr(..), Html(..), htmlToReal, node, style, text)
 
 import Html
 import Html.Attributes
