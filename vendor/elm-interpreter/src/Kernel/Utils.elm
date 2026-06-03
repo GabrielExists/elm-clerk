@@ -117,7 +117,6 @@ innerCompare l r env =
         ( List _, _ ) ->
             uncomparable ()
 
-
         ( Custom lname lvalues, Custom rname rvalues ) ->
             if lname.moduleName /= rname.moduleName then
                 inner lname.moduleName rname.moduleName
