@@ -32,6 +32,7 @@ style first second =
     Attribute first second
 
 
+htmlToReal : Html -> Html.Html msg
 htmlToReal html =
     case html of
         Node name attrs children ->
@@ -43,6 +44,7 @@ htmlToReal html =
             Html.text string
 
 
+attrToReal : Attr -> Html.Attribute msg
 attrToReal attr =
     case attr of
         Attribute first second ->
