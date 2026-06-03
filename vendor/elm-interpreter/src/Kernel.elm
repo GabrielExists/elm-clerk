@@ -504,16 +504,9 @@ html =
         \value ->
             case value of
                 Custom [ "Html" ] "Node" [ String name, attrsValue, nodesValue ] ->
-                    case
-                        ( attrsValue |> (list attr).fromValue
-                        , nodesValue |> (list html).fromValue
-                        )
-                    of
-                        ( Just attrs, Just nodes ) ->
-                            Node name attrs nodes |> Just
-
-                        _ ->
-                            Nothing
+                    Maybe.map2 (Node name)
+                        (attrsValue |> (list attr).fromValue)
+                        (nodesValue |> (list html).fromValue)
 
                 Custom [ "Html" ] "Text" [ String text ] ->
                     Text text |> Just
