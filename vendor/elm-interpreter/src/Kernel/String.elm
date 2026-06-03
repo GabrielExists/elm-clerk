@@ -2,7 +2,7 @@ module Kernel.String exposing (filter, foldl, foldr, fromNumber)
 
 import Eval.Types as Types
 import EvalResult
-import IntTypes exposing (Eval, Value(..))
+import InterpreterTypes exposing (Eval, Value(..))
 import Value exposing (typeError)
 
 

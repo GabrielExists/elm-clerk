@@ -3,7 +3,7 @@ module Eval.Types exposing (combineMap, errorToString, evalErrorToString, failPa
 import Elm.Syntax.Expression exposing (Expression)
 import Elm.Syntax.Node exposing (Node)
 import EvalResult
-import IntTypes exposing (Config, Env, Error(..), Eval, EvalErrorData, EvalErrorKind(..), EvalResult, PartialResult)
+import InterpreterTypes exposing (Config, Env, Error(..), Eval, EvalErrorData, EvalErrorKind(..), EvalResult, PartialResult)
 import Parser
 import Recursion exposing (Rec)
 import Recursion.Traverse

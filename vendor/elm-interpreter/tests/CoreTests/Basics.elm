@@ -5,7 +5,7 @@ import Dict
 import Set
 import Test exposing (Test, describe)
 import TestUtils exposing (evalTest, evalTest_, list)
-import IntTypes exposing (Value(..))
+import InterpreterTypes exposing (Value(..))
 import Value
 
 

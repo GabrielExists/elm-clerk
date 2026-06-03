@@ -6,7 +6,7 @@ import Dict exposing (Dict)
 import Element exposing (Element)
 import Html exposing (Html)
 import Http
-import IntTypes
+import InterpreterTypes
 import Url exposing (Url)
 
 
@@ -15,7 +15,7 @@ type alias FrontendModel =
     , message : String
     , source : String
     , sections : List Section
-    , interactiveValues : Dict String (List IntTypes.Value)
+    , interactiveValues : Dict String (List InterpreterTypes.Value)
     }
 
 
@@ -31,7 +31,7 @@ type FrontendMsg
     | NoOpFrontendMsg
     | GotText (Result Http.Error String)
     | WroteText (Result Http.Error ())
-    | InteractiveUpdated String (List IntTypes.Value)
+    | InteractiveUpdated String (List InterpreterTypes.Value)
 
 
 type ToBackend

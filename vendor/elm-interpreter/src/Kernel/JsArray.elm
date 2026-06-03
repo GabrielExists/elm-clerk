@@ -3,7 +3,7 @@ module Kernel.JsArray exposing (appendN, foldl, foldr, indexedMap, initialize, i
 import Array exposing (Array)
 import Eval.Types as Types
 import EvalResult
-import IntTypes exposing (Eval, Value)
+import InterpreterTypes exposing (Eval, Value)
 import List.Extra
 import Value
 

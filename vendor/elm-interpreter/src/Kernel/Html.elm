@@ -2,7 +2,7 @@ module Kernel.Html exposing (Attr(..), Html(..), htmlToReal, node, style, text)
 
 import Html
 import Html.Attributes
-import IntTypes exposing (Value(..))
+import InterpreterTypes exposing (Value(..))
 import Json.Encode
 import Value
 
