@@ -10,6 +10,7 @@ import Environment
 import Eval.Types as Types
 import EvalResult
 import FastDict as Dict exposing (Dict)
+import IntTypes exposing (CallTree(..), Env, EnvValues, Eval, EvalErrorData, EvalResult, PartialEval, PartialResult, Value(..))
 import Kernel
 import List.Extra
 import Recursion
@@ -18,7 +19,6 @@ import Rope
 import Set exposing (Set)
 import Syntax
 import TopologicalSort
-import IntTypes exposing (CallTree(..), Env, EnvValues, Eval, EvalErrorData, EvalResult, PartialEval, PartialResult, Value(..))
 import Unicode
 import Value exposing (nameError, typeError, unsupported)
 
