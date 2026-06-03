@@ -6,6 +6,7 @@ import Dict exposing (Dict)
 import Element exposing (Attribute, Element, fill, paddingEach, px, width)
 import Element.Background
 import Element.Font as Font
+import Element.Input
 import Elm.Parser
 import Elm.Parser.Comments
 import Elm.Parser.Declarations
@@ -370,96 +371,41 @@ parseTogetherSingle ( pattern, annotation ) =
             Err ("Can't handle " ++ patternToStringDebug p ++ " : " ++ (a |> annotationToString))
 
 
-parseTogetherExperiment : Declaration -> List Pattern -> List a -> String
-parseTogetherExperiment declaration evalPatterns alreadyApplied =
-    let
-        arguments : Maybe (List Pattern)
-        arguments =
-            declarationArguments declaration
 
-        bigAnnotation : Result String TypeAnnotation
-        bigAnnotation =
-            declarationTypeAnnotation declaration
+--type alias InteractiveElement = {
+--    key: String,
+--    conversion:
+--}
 
-        relevantPatterns : List String
-        relevantPatterns =
-            evalPatterns
-                |> List.drop (List.length alreadyApplied)
-                |> List.map patternToString
 
-        annotationList : List TypeAnnotation
-        annotationList =
-            bigAnnotation
-                |> Result.map bigAnnotationToList
-                |> Result.withDefault []
+typeNodeMap : Dict String (String -> Element msg)
+typeNodeMap =
+    [ ( "Int"
+      , \binding ->
+            --Element.Input.slider []
+            viewOutput
+                ("Int, for binding " ++ binding ++ "!")
+      )
+    ]
+        |> Dict.fromList
 
-        parsedTogether : Result String (List ( String, String ))
-        parsedTogether =
-            parseTogether
-                evalPatterns
-                declaration
-                (List.length alreadyApplied)
-    in
-    (if Maybe.withDefault [] arguments == evalPatterns then
-        "Equal"
 
-     else
-        "Not equal"
-    )
-        ++ "\n"
-        ++ (if List.length (parsedTogether |> Result.withDefault []) == List.length annotationList - 1 then
-                "Annotations seem correct"
-
-            else
-                "Annotations seem wrong"
-           )
-        ++ "\n Patterns from Eval:\n"
-        ++ (evalPatterns
-                |> List.map patternToString
-                |> String.join ", "
-           )
-        ++ "\n Patterns from syntax:\n"
-        ++ (arguments
-                |> Maybe.withDefault []
-                |> List.map patternToString
-                |> String.join ", "
-           )
-        ++ "\n Type annotations:\n"
-        ++ (annotationList
-                |> List.map annotationToString
-                |> String.join ", "
-           )
-        --++ "\n Pairs: \n"
-        --++ (parse
-        --        |> List.map (\( first, second ) -> first ++ ": " ++ second)
-        --        |> String.join "\n"
-        --   )
-        ++ "\n Parsed together: \n"
-        ++ (case parsedTogether of
-                Ok list ->
-                    list
-                        |> List.map (\( pattern, annotation ) -> pattern ++ ": " ++ annotation)
-                        |> String.join "\n"
-
-                Err string ->
-                    "Error: " ++ string
-           )
+findTypeNode : ( String, String ) -> Result String (Element msg)
+findTypeNode ( binding, key ) =
+    Dict.get key typeNodeMap
+        |> Maybe.map (\func -> func binding)
+        |> Maybe.map Ok
+        |> Maybe.withDefault (Err ("No way to handle type \"" ++ key ++ "\""))
 
 
 handlePartiallyApplied : String -> Value -> Declaration -> Section
-handlePartiallyApplied source functionDeclaration declaration =
-    case functionDeclaration of
+handlePartiallyApplied source partiallyApplied declaration =
+    case partiallyApplied of
         PartiallyApplied env values patterns maybeName expression ->
             let
-                together =
-                    parseTogetherExperiment declaration (patterns |> List.map Node.value) values
-
-                --togetherTwo =
-                --    parseTogetherTwo declaration (patterns |> List.map Node.value) (List.length values)
-                --
-                parameterNames : List String
-                parameterNames =
-                    [ "first", "second" ]
+                maybePairs : Result String (List ( String, String ))
+                maybePairs =
+                    parseTogether (patterns |> List.map Node.value) declaration (List.length values)
 
                 functionOutput : Result String Value
                 functionOutput =
@@ -480,24 +426,35 @@ handlePartiallyApplied source functionDeclaration declaration =
                     --                                        in
                     evaluate (Ok env) expression
 
-                debugElements : List (Element msg)
-                debugElements =
-                    [ functionDeclaration
-                        |> functionDeclarationToString
-                        |> viewOutput
-                    , viewOutput together
-                    ]
+                --debugElements : List (Element msg)
+                --debugElements =
+                --    [ partiallyApplied
+                --        |> functionDeclarationToString
+                --        |> viewOutput
+                --    , viewOutput together
+                --    ]
+                interactiveElements : List (Element msg)
+                interactiveElements =
+                    case maybePairs of
+                        Ok pairs ->
+                            pairs
+                                |> Result.Extra.combineMap findTypeNode
+                                |> Result.Extra.extract (\error -> viewOutput error |> List.singleton)
+
+                        --|> Result.withDefault (\x -> x |> viewOutput |> List.singleton)
+                        Err error ->
+                            [ viewOutput error ]
             in
             case functionOutput of
                 Ok functionOutputOk ->
                     --EvaluatedSection source (functionDeclarationToString functionDeclaration)
                     InteractiveSection source
-                        debugElements
+                        interactiveElements
                         (Value.toString functionOutputOk)
 
                 Err functionOutputError ->
                     --EvaluatedSection source (functionDeclarationToString functionDeclaration)
-                    InteractiveSection source debugElements functionOutputError
+                    InteractiveSection source interactiveElements functionOutputError
 
         _ ->
             ErrorSection [ "Called handlePartiallyApplied with a declaration that was not a function" ]

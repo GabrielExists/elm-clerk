@@ -7,6 +7,11 @@ import Rope
 import Types exposing (FrontendMsg)
 
 
+double : Int -> Int
+double int =
+    int * 2
+
+
 applied =
     repeat '[' ']' 4 "Word"
 
