@@ -2,7 +2,7 @@ module CoreTests.Maybe exposing (suite)
 
 import Test exposing (Test, describe)
 import TestUtils exposing (evalTest, maybe)
-import IntTypes exposing (Value(..))
+import InterpreterTypes exposing (Value(..))
 
 
 suite : Test

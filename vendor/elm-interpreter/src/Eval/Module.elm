@@ -19,7 +19,7 @@ import Elm.Syntax.TypeAnnotation exposing (TypeAnnotation(..))
 import Environment
 import Eval.Expression
 import FastDict as Dict exposing (Dict)
-import IntTypes exposing (CallTree, Env, Error(..), ImportedNames, Value)
+import InterpreterTypes exposing (CallTree, Env, Error(..), ImportedNames, Value)
 import List.Extra
 import Result.Extra
 import Rope exposing (Rope)
@@ -87,7 +87,7 @@ traceOrEvalModule cfg source expression =
                         { trace = cfg.trace }
                         env
             in
-            ( Result.mapError IntTypes.EvalError result
+            ( Result.mapError InterpreterTypes.EvalError result
             , callTrees
             , logLines
             )
@@ -107,7 +107,7 @@ buildInitialEnv file =
         imports : ImportedNames
         imports =
             (defaultImports ++ file.imports)
-                |> List.foldl (processImport coreInterfaces) IntTypes.emptyImports
+                |> List.foldl (processImport coreInterfaces) InterpreterTypes.emptyImports
 
         coreEnv : Env
         coreEnv =
@@ -137,7 +137,7 @@ buildInitialEnv file =
 
                 Destructuring _ _ ->
                     -- This doesn't happen in valid Elm modules
-                    Err <| IntTypes.EvalError <| unsupported env "Top level destructuring"
+                    Err <| InterpreterTypes.EvalError <| unsupported env "Top level destructuring"
 
                 AliasDeclaration alias_ ->
                     Ok (registerRecordAliasConstructor moduleName alias_ env)
@@ -369,7 +369,7 @@ evalProject sources expression =
                             , callStack = []
                             , functions = Core.functions
                             , values = Dict.empty
-                            , imports = IntTypes.emptyImports
+                            , imports = InterpreterTypes.emptyImports
                             , moduleImports = Dict.empty
                             }
             in
@@ -401,10 +401,10 @@ evalProject sources expression =
                             case lastFile of
                                 Just file ->
                                     (defaultImports ++ file.imports)
-                                        |> List.foldl (processImport allInterfaces) IntTypes.emptyImports
+                                        |> List.foldl (processImport allInterfaces) InterpreterTypes.emptyImports
 
                                 Nothing ->
-                                    IntTypes.emptyImports
+                                    InterpreterTypes.emptyImports
 
                         finalEnv : Env
                         finalEnv =
@@ -419,7 +419,7 @@ evalProject sources expression =
                                 { trace = False }
                                 finalEnv
                     in
-                    Result.mapError IntTypes.EvalError result
+                    Result.mapError InterpreterTypes.EvalError result
 
 
 buildModuleEnv :
@@ -437,7 +437,7 @@ buildModuleEnv allInterfaces { file, moduleName } env =
         moduleImportedNames : ImportedNames
         moduleImportedNames =
             (defaultImports ++ file.imports)
-                |> List.foldl (processImport allInterfaces) IntTypes.emptyImports
+                |> List.foldl (processImport allInterfaces) InterpreterTypes.emptyImports
 
         envWithModuleImports : Env
         envWithModuleImports =
@@ -463,13 +463,13 @@ buildModuleEnv allInterfaces { file, moduleName } env =
                     Ok (registerConstructors moduleName customType envAcc)
 
                 PortDeclaration _ ->
-                    Err <| IntTypes.EvalError <| unsupported envAcc "Port declaration"
+                    Err <| InterpreterTypes.EvalError <| unsupported envAcc "Port declaration"
 
                 InfixDeclaration _ ->
-                    Err <| IntTypes.EvalError <| unsupported envAcc "Infix declaration"
+                    Err <| InterpreterTypes.EvalError <| unsupported envAcc "Infix declaration"
 
                 Destructuring _ _ ->
-                    Err <| IntTypes.EvalError <| unsupported envAcc "Top level destructuring"
+                    Err <| InterpreterTypes.EvalError <| unsupported envAcc "Top level destructuring"
 
                 AliasDeclaration alias_ ->
                     Ok (registerRecordAliasConstructor moduleName alias_ envAcc)

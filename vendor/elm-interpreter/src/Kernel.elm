@@ -18,7 +18,7 @@ import Elm.Syntax.Pattern exposing (Pattern(..), QualifiedNameRef)
 import Environment
 import EvalResult
 import FastDict as Dict exposing (Dict)
-import IntTypes exposing (Eval, EvalErrorData, EvalResult, Value(..))
+import InterpreterTypes exposing (Eval, EvalErrorData, EvalResult, Value(..))
 import Kernel.Debug
 import Kernel.Html exposing (Attr(..), Html(..))
 import Kernel.JsArray

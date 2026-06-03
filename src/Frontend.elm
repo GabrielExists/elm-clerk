@@ -19,7 +19,7 @@ import Eval.Expression
 import Eval.Module
 import Html
 import Http exposing (stringBody)
-import IntTypes exposing (Env, Error(..), Value(..))
+import InterpreterTypes exposing (Env, Error(..), Value(..))
 import Kernel
 import Kernel.Html
 import Lamdera exposing (sendToBackend)
@@ -416,7 +416,7 @@ handlePartiallyApplied source partiallyApplied declaration =
                     --        | values = Dict.union (model.interactiveValues |> Dict.map (\key value ->
                     --            let a : FrontendModel -> MaybeEnv -> String -> Section
                     --            a = value in
-                    --, interactiveValues : Dict String (List IntTypes.Value)
+                    --, interactiveValues : Dict String (List InterpreterTypes.Value)
                     --                                                        a
                     --                                                    ) env.values
                     --                                                }
@@ -514,7 +514,7 @@ evaluate maybeEnv expressionNode =
                                 { trace = False }
                                 env
                     in
-                    Result.mapError IntTypes.EvalError result
+                    Result.mapError InterpreterTypes.EvalError result
 
         error_to_string : Error -> String
         error_to_string error =

@@ -4,7 +4,7 @@ import Array
 import Elm.Syntax.ModuleName exposing (ModuleName)
 import EvalResult
 import FastDict as Dict exposing (Dict)
-import IntTypes exposing (Env, Eval, EvalErrorData, Value(..))
+import InterpreterTypes exposing (Env, Eval, EvalErrorData, Value(..))
 import Value exposing (typeError)
 
 

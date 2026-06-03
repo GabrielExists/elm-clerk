@@ -4,7 +4,7 @@ import Elm.Syntax.Expression exposing (Expression(..))
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Pattern exposing (Pattern(..), QualifiedNameRef)
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
-import IntTypes exposing (Value(..))
+import InterpreterTypes exposing (Value(..))
 import Parser exposing (DeadEnd)
 import Value
 
@@ -63,19 +63,19 @@ functionDeclarationToString value =
             ""
 
 
-evalErrorKindToString : IntTypes.EvalErrorKind -> String
+evalErrorKindToString : InterpreterTypes.EvalErrorKind -> String
 evalErrorKindToString errorKind =
     case errorKind of
-        IntTypes.TypeError string ->
+        InterpreterTypes.TypeError string ->
             "TypeError: " ++ string
 
-        IntTypes.Unsupported string ->
+        InterpreterTypes.Unsupported string ->
             "Unsupported: " ++ string
 
-        IntTypes.NameError string ->
+        InterpreterTypes.NameError string ->
             "NameError: " ++ string
 
-        IntTypes.Todo string ->
+        InterpreterTypes.Todo string ->
             "Todo: " ++ string
 
 

@@ -19,7 +19,7 @@ import Expression.Extra
 import FastDict
 import Hex
 import Html
-import IntTypes exposing (CallTree(..), Error(..), Value)
+import InterpreterTypes exposing (CallTree(..), Error(..), Value)
 import Json.Encode
 import List.Extra
 import Rope

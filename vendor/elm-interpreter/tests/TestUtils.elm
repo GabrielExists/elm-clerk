@@ -4,7 +4,7 @@ import Eval
 import Expect
 import Syntax
 import Test exposing (Test, test)
-import IntTypes exposing (Error(..), Value(..))
+import InterpreterTypes exposing (Error(..), Value(..))
 
 
 evalTest_ : String -> (a -> Value) -> a -> Test

@@ -1,7 +1,7 @@
 module Kernel.Debug exposing (log, todo)
 
 import EvalResult
-import IntTypes exposing (Eval, Value)
+import InterpreterTypes exposing (Eval, Value)
 import Rope
 import Value
 

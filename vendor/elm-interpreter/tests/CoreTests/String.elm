@@ -3,7 +3,7 @@ module CoreTests.String exposing (suite)
 import Expect
 import Test exposing (Test, describe, test)
 import TestUtils exposing (evalTest_, list)
-import IntTypes exposing (Value(..))
+import InterpreterTypes exposing (Value(..))
 
 
 suite : Test

@@ -7,7 +7,7 @@ import Expect
 import FastDict as Dict
 import Test exposing (Test, describe, test)
 import TestUtils exposing (evalTest, evalTest_, list, slowTest)
-import IntTypes exposing (Value(..))
+import InterpreterTypes exposing (Value(..))
 
 
 suite : Test

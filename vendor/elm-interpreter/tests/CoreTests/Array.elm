@@ -4,7 +4,7 @@ import Array exposing (Array)
 import Fuzz exposing (Fuzzer, intRange)
 import Test exposing (Test, describe, fuzz)
 import TestUtils exposing (evalExpect, evalTest, list, maybe, withInt)
-import IntTypes exposing (Value(..))
+import InterpreterTypes exposing (Value(..))
 
 
 suite : Test
