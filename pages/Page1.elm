@@ -12,6 +12,11 @@ double int =
     int * 2
 
 
+multiply : Int -> Int -> Int
+multiply first second =
+    first * second
+
+
 applied =
     repeat '[' ']' 4 "Word"
 

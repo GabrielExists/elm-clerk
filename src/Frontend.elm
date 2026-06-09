@@ -21,6 +21,7 @@ import Eval.Module
 import FastDict as Dict exposing (Dict)
 import Html
 import Http exposing (stringBody)
+import Interactives exposing (interactivesEmpty, interactivesGet, interactivesInsert)
 import InterpreterTypes exposing (Env, Error(..), Value(..))
 import Kernel
 import Kernel.Html
@@ -34,7 +35,7 @@ import ParserFast
 import Regex
 import Result.Extra
 import ToString exposing (annotationToString, deadEndsToStrings, evalErrorKindToString, patternToStringDebug, qualifiedNameRefToString)
-import Types exposing (Cell(..), FrontendModel, FrontendMsg(..), InteractiveValues, Section(..), SectionResult, ToBackend(..), ToFrontend(..))
+import Types exposing (BackendMsg(..), Cell(..), Code(..), FrontendModel, FrontendMsg(..), FullCode(..), FunctionName(..), Interactives(..), Markdown(..), Output(..), ParameterName(..), RawInteractiveValue(..), Section(..), SectionResult, ToBackend(..), ToFrontend(..), TypeName(..))
 import UI.Source as Source
 import Url
 import Value
@@ -60,14 +61,17 @@ init : Url.Url -> Nav.Key -> ( Model, Cmd FrontendMsg )
 init _ key =
     ( { key = key
       , message = "Welcome to Lamdera! You're looking at the auto-generated base implementation. Check out src/Frontend.elm to start coding! "
-      , source = ""
+      , source = FullCode ""
       , sectionResults = []
-      , interactiveValues = Dict.empty
+      , interactives = interactivesEmpty
       }
-    , Http.get
-        { url = "/_x/read/pages/Page1.elm"
-        , expect = Http.expectString GotText
-        }
+    , Cmd.batch
+        [ Http.get
+            { url = "/_x/read/pages/Page1.elm"
+            , expect = Http.expectString GotText
+            }
+        , sendToBackend RequestStartup
+        ]
     )
 
 
@@ -94,9 +98,13 @@ update msg model =
 
         GotText result ->
             case result of
-                Ok source ->
+                Ok stringSource ->
                     let
-                        sectionResults : List ( String, SectionResult )
+                        source : FullCode
+                        source =
+                            FullCode stringSource
+
+                        sectionResults : List ( Code, SectionResult )
                         sectionResults =
                             cellsFromSource source
                     in
@@ -117,12 +125,12 @@ update msg model =
         WroteText _ ->
             ( model, Cmd.none )
 
-        InteractiveUpdated name value ->
+        InteractiveUpdated names value ->
             let
-                newDict =
-                    Dict.insert name value model.interactiveValues
+                newInteractives =
+                    interactivesInsert names value model.interactives
             in
-            ( { model | interactiveValues = Debug.log "Updated dict:" newDict }, Cmd.none )
+            ( { model | interactives = Debug.log "Updated dict:" newInteractives }, sendToBackend (InteractivesToBackend newInteractives) )
 
 
 updateFromBackend : ToFrontend -> Model -> ( Model, Cmd FrontendMsg )
@@ -130,6 +138,9 @@ updateFromBackend msg model =
     case msg of
         NoOpToFrontend ->
             ( model, Cmd.none )
+
+        Startup interactives ->
+            ( { model | interactives = interactives }, Cmd.none )
 
 
 
@@ -146,8 +157,8 @@ parse source =
             deadEndsToStrings deadEnds
 
 
-cellsFromSource : String -> List ( String, SectionResult )
-cellsFromSource fullSource =
+cellsFromSource : FullCode -> List ( Code, SectionResult )
+cellsFromSource (FullCode fullSource) =
     let
         newSectionRegex : Regex.Regex
         newSectionRegex =
@@ -156,7 +167,7 @@ cellsFromSource fullSource =
     in
     Regex.split newSectionRegex
         fullSource
-        |> List.map (\source -> ( source, parseSection source ))
+        |> List.map (\source -> ( Code source, parseSection (Code source) ))
 
 
 
@@ -170,13 +181,13 @@ cellsFromSource fullSource =
 --   )
 
 
-plaintextFromSections : List ( String, SectionResult ) -> String
+plaintextFromSections : List ( Code, SectionResult ) -> String
 plaintextFromSections sections =
     ""
 
 
-parseSection : String -> Result (List DeadEnd) (List Cell)
-parseSection source =
+parseSection : Code -> Result (List DeadEnd) (List Cell)
+parseSection (Code source) =
     let
         parser : ParserFast.Parser (List Cell)
         parser =
@@ -184,7 +195,7 @@ parseSection source =
                 (ParserFast.loopWhileSucceeds
                     (ParserFast.oneOf2
                         (ParserFast.map (\x -> CellDeclaration x.syntax) Elm.Parser.Declarations.declaration)
-                        (ParserFast.map CellComment Elm.Parser.Comments.singleLineComment)
+                        (ParserFast.map (\x -> x |> Node.map Markdown |> CellComment) Elm.Parser.Comments.singleLineComment)
                         |> ParserFast.followedBySkipWhileWhitespace
                     )
                     []
@@ -195,7 +206,7 @@ parseSection source =
     ParserFast.run parser source
 
 
-handleParsedSection : InteractiveValues -> Result Error Env -> ( String, Result error (List Cell) ) -> Section
+handleParsedSection : Interactives -> Result Error Env -> ( Code, Result error (List Cell) ) -> Section
 handleParsedSection interactiveValues maybeEnv ( source, parsedSection ) =
     case parsedSection of
         Ok cells ->
@@ -226,11 +237,11 @@ handleParsedSection interactiveValues maybeEnv ( source, parsedSection ) =
             case lastCode of
                 Just (CellDeclaration (Node _ declaration)) ->
                     let
-                        expressionName : String
+                        expressionName : FunctionName
                         expressionName =
-                            extractNameFromDeclaration declaration
+                            extractNameFromDeclaration declaration |> FunctionName
 
-                        evaluated : Result String Value
+                        evaluated : Result Output Value
                         evaluated =
                             evaluateName maybeEnv expressionName
                     in
@@ -250,7 +261,7 @@ handleParsedSection interactiveValues maybeEnv ( source, parsedSection ) =
                         |> List.map
                             (\comment ->
                                 case comment of
-                                    CellComment (Node _ text) ->
+                                    CellComment (Node _ (Markdown text)) ->
                                         let
                                             contents =
                                                 String.dropLeft 2 text
@@ -265,12 +276,14 @@ handleParsedSection interactiveValues maybeEnv ( source, parsedSection ) =
                                         ""
                             )
                         |> String.join "\n"
+                        |> Markdown
                         |> MarkdownSection
 
         Err _ ->
             CodeSection source
 
 
+bigAnnotationToList : TypeAnnotation -> List TypeAnnotation
 bigAnnotationToList annotation =
     case annotation of
         TypeAnnotation.FunctionTypeAnnotation first second ->
@@ -301,23 +314,23 @@ declarationArguments declaration =
             Nothing
 
 
-declarationTypeAnnotation : Declaration -> Result String TypeAnnotation
+declarationTypeAnnotation : Declaration -> Result Output TypeAnnotation
 declarationTypeAnnotation declaration =
     case declaration of
         FunctionDeclaration function ->
             function
                 |> .signature
                 |> Maybe.map Ok
-                |> Maybe.withDefault (Err "No signature")
+                |> Maybe.withDefault (Err (Output "No signature"))
                 |> Result.map Node.value
                 |> Result.map .typeAnnotation
                 |> Result.map Node.value
 
         _ ->
-            Err "Not a function declaration"
+            Err (Output "Not a function declaration")
 
 
-parseTogether : List Pattern -> Declaration -> Int -> Result String (List ( String, String ))
+parseTogether : List Pattern -> Declaration -> Int -> Result Output (List ( ParameterName, TypeName ))
 parseTogether patterns declaration numApplied =
     declarationTypeAnnotation declaration
         |> Result.map bigAnnotationToList
@@ -329,7 +342,7 @@ parseTogether patterns declaration numApplied =
             )
 
 
-parseTogetherSingle : ( Pattern, TypeAnnotation ) -> Result String (List ( String, String ))
+parseTogetherSingle : ( Pattern, TypeAnnotation ) -> Result Output (List ( ParameterName, TypeName ))
 parseTogetherSingle ( pattern, annotation ) =
     case ( pattern, annotation ) of
         ( TuplePattern patterns, TypeAnnotation.Tupled annotations ) ->
@@ -360,41 +373,48 @@ parseTogetherSingle ( pattern, annotation ) =
                            )
                         |> String.join " "
             in
-            Ok [ ( binding, fullTypeName ) ]
+            Ok [ ( ParameterName binding, TypeName fullTypeName ) ]
 
         --NamedPattern QualifiedNameRef (List (Node Pattern))
         --AsPattern (Node Pattern) (Node String)
         --ParenthesizedPattern (Node Pattern)
         ( p, a ) ->
-            Err ("Can't handle " ++ patternToStringDebug p ++ " : " ++ (a |> annotationToString))
+            Err (Output ("Can't handle " ++ patternToStringDebug p ++ " : " ++ (a |> annotationToString)))
 
 
 type alias InteractiveElement =
-    { key : String
-    , conversion : String -> Result String Value
-    , element : ( String, String ) -> Maybe String -> Element FrontendMsg
+    { key : TypeName
+    , conversion : RawInteractiveValue -> Result Output Value
+    , element : ( FunctionName, ParameterName ) -> Maybe RawInteractiveValue -> Element FrontendMsg
     }
 
 
 interactiveElementInt : InteractiveElement
 interactiveElementInt =
     let
-        conversion =
-            \text -> text |> String.toInt |> Result.fromMaybe "Couldn't parse!" |> Result.map Kernel.int.toValue
+        conversion : RawInteractiveValue -> Result Output Value
+        conversion (RawInteractiveValue text) =
+            text
+                |> String.toInt
+                |> Result.fromMaybe "Couldn't parse!"
+                |> Result.map Kernel.int.toValue
+                |> Result.mapError Output
     in
-    { key = "Int"
+    { key = TypeName "Int"
     , conversion = conversion
     , element =
-        \binding value ->
-            Element.column []
-                [ viewOutput
-                    (Tuple.second binding ++ " : Int = " ++ Maybe.withDefault "" value)
-                , Element.Input.text
+        \( functionName, ParameterName parameterName ) maybeRawValue ->
+            let
+                maybeValue =
+                    maybeRawValue |> Maybe.map (\(RawInteractiveValue x) -> x)
+            in
+            Element.row [ Element.padding 6 ]
+                [ Element.Input.text
                     []
-                    { onChange = InteractiveUpdated binding
-                    , text = Maybe.withDefault "" value
+                    { onChange = \x -> InteractiveUpdated ( functionName, ParameterName parameterName ) (RawInteractiveValue x)
+                    , text = Maybe.withDefault "" maybeValue
                     , placeholder = Nothing
-                    , label = Element.Input.labelAbove [] (Element.text "Label")
+                    , label = Element.Input.labelAbove [ monospace ] (Element.text (parameterName ++ " : Int = " ++ Maybe.withDefault "" maybeValue))
                     }
                 ]
     }
@@ -404,61 +424,73 @@ typeNodeMap : Dict String InteractiveElement
 typeNodeMap =
     [ interactiveElementInt
     ]
-        |> List.map (\x -> ( x.key, x ))
+        |> List.map
+            (\x ->
+                ( let
+                    (TypeName key) =
+                        x.key
+                  in
+                  key
+                , x
+                )
+            )
         |> Dict.fromList
 
 
-viewInteractive : InteractiveValues -> String -> ( String, String ) -> Result String (Element FrontendMsg)
-viewInteractive interactiveValues functionName ( binding, typeName ) =
+viewInteractive : Interactives -> FunctionName -> ( ParameterName, TypeName ) -> Result Output (Element FrontendMsg)
+viewInteractive interactiveValues functionName ( binding, TypeName typeName ) =
     let
         maybeValue =
-            Dict.get (Debug.log "Fetching" ( functionName, binding )) (Debug.log "From" interactiveValues) |> Debug.log "Got"
+            interactivesGet (Debug.log "Fetching" ( functionName, binding )) (Debug.log "From" interactiveValues) |> Debug.log "Got"
+
+        (ParameterName bindingString) =
+            binding
     in
     case Dict.get typeName typeNodeMap of
         Nothing ->
-            Err (binding ++ " - No way to handle type \"" ++ typeName ++ "\"")
+            Err (Output (bindingString ++ " - No way to handle type \"" ++ typeName ++ "\""))
 
         Just interactiveElement ->
             Ok (interactiveElement.element ( functionName, binding ) maybeValue)
 
 
-handlePartiallyApplied : InteractiveValues -> String -> Value -> Declaration -> Section
+handlePartiallyApplied : Interactives -> Code -> Value -> Declaration -> Section
 handlePartiallyApplied interactiveValues source partiallyApplied declaration =
     case partiallyApplied of
         PartiallyApplied env alreadyApplied patterns nameRef expression ->
             let
-                maybePairs : Result String (List ( String, String ))
+                maybePairs : Result Output (List ( ParameterName, TypeName ))
                 maybePairs =
                     parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
 
-                maybeFunctionName : Maybe String
+                maybeFunctionName : Maybe FunctionName
                 maybeFunctionName =
-                    nameRef |> Maybe.map qualifiedNameRefToString
+                    nameRef |> Maybe.map qualifiedNameRefToString |> Maybe.map FunctionName
 
-                functionOutput : Result String Value
+                functionOutput : Result Output Value
                 functionOutput =
                     case maybeFunctionName of
                         Nothing ->
-                            Err "No function name"
+                            Err (Output "No function name")
 
                         Just functionName ->
                             let
-                                insertIntoValues : ( String, String ) -> Dict String Value -> Dict String Value
-                                insertIntoValues ( binding, typeName ) localValues =
+                                insertIntoValues : ( ParameterName, TypeName ) -> Dict String Value -> Dict String Value
+                                insertIntoValues ( ParameterName binding, TypeName typeName ) localValues =
                                     let
                                         maybeTypeNode : Maybe InteractiveElement
                                         maybeTypeNode =
                                             Dict.get typeName typeNodeMap
 
-                                        maybeRawValue : Maybe String
+                                        maybeRawValue : Maybe RawInteractiveValue
                                         maybeRawValue =
-                                            Dict.get ( functionName, binding ) interactiveValues
+                                            interactivesGet ( functionName, ParameterName binding ) interactiveValues
 
-                                        typeNodeToValue : { a | conversion : b -> c } -> b -> c
+                                        typeNodeToValue : InteractiveElement -> RawInteractiveValue -> Result Output Value
                                         typeNodeToValue typeNode rawValue =
                                             typeNode.conversion rawValue
 
-                                        maybeValue : Maybe (Result String Value)
+                                        maybeValue : Maybe (Result Output Value)
                                         maybeValue =
                                             Maybe.map2 typeNodeToValue maybeTypeNode maybeRawValue
                                     in
@@ -484,7 +516,7 @@ handlePartiallyApplied interactiveValues source partiallyApplied declaration =
                                                         pairs
                                             }
                             in
-                            evaluate (Ok env) expression
+                            evaluate (Ok newEnv) expression
 
                 --debugElements : List (Element msg)
                 --debugElements =
@@ -497,7 +529,7 @@ handlePartiallyApplied interactiveValues source partiallyApplied declaration =
                 interactiveElements =
                     case maybeFunctionName of
                         Nothing ->
-                            [ viewOutput "No name in function" ]
+                            [ viewOutput (Output "No name in function") ]
 
                         Just functionName ->
                             case maybePairs of
@@ -515,16 +547,17 @@ handlePartiallyApplied interactiveValues source partiallyApplied declaration =
                     --EvaluatedSection source (functionDeclarationToString functionDeclaration)
                     InteractiveSection source
                         interactiveElements
-                        (Value.toString functionOutputOk)
+                        (Value.toString functionOutputOk |> Output)
 
                 Err functionOutputError ->
                     --EvaluatedSection source (functionDeclarationToString functionDeclaration)
                     InteractiveSection source interactiveElements functionOutputError
 
         _ ->
-            ErrorSection [ "Called handlePartiallyApplied with a declaration that was not a function" ]
+            ErrorSection [ Output "Called handlePartiallyApplied with a declaration that was not a function" ]
 
 
+handleSuccessfulParse : Code -> Value -> Section
 handleSuccessfulParse source value =
     case Kernel.html.fromValue value of
         Just html ->
@@ -532,11 +565,11 @@ handleSuccessfulParse source value =
                 |> HtmlSection source
 
         _ ->
-            EvaluatedSection source (Value.toString value)
+            EvaluatedSection source (Value.toString value |> Output)
 
 
-makeEnv : String -> Result Error Env
-makeEnv source =
+makeEnv : FullCode -> Result Error Env
+makeEnv (FullCode source) =
     let
         file : Result (List DeadEnd) File
         file =
@@ -549,8 +582,8 @@ makeEnv source =
     Result.andThen Eval.Module.buildInitialEnv fileMappedError
 
 
-evaluateName : Result Error Env -> String -> Result String Value
-evaluateName maybeEnv expressionName =
+evaluateName : Result Error Env -> FunctionName -> Result Output Value
+evaluateName maybeEnv (FunctionName expressionName) =
     let
         expression : Expression
         expression =
@@ -565,7 +598,7 @@ evaluateName maybeEnv expressionName =
     evaluate maybeEnv expressionNode
 
 
-evaluate : Result Error Env -> Node Expression -> Result String Value
+evaluate : Result Error Env -> Node Expression -> Result Output Value
 evaluate maybeEnv expressionNode =
     let
         module_run : Result Error Value
@@ -599,7 +632,7 @@ evaluate maybeEnv expressionNode =
                         ++ [ evalErrorKindToString errorData.error ]
                         |> String.join "\n"
     in
-    module_run |> Result.mapError error_to_string
+    module_run |> Result.mapError error_to_string |> Result.mapError Output
 
 
 extractNameFromDeclaration : Declaration -> String
@@ -664,13 +697,14 @@ view model =
 viewSections : Model -> List (Element FrontendMsg)
 viewSections model =
     let
-        maybeEnv =
-            makeEnv model.source
+        maybeEnv : FullCode -> Result Error Env
+        maybeEnv source =
+            makeEnv source
 
-        processSection : ( String, Result error (List Cell) ) -> Element FrontendMsg
+        processSection : ( Code, Result error (List Cell) ) -> Element FrontendMsg
         processSection sectionResult =
             sectionResult
-                |> handleParsedSection model.interactiveValues maybeEnv
+                |> handleParsedSection model.interactives (maybeEnv model.source)
                 |> viewSection
     in
     model.sectionResults |> List.map (Element.Lazy.lazy processSection)
@@ -687,8 +721,8 @@ monospace =
 viewSection : Section -> Element FrontendMsg
 viewSection section =
     let
-        syntaxHighlight : String -> Element msg
-        syntaxHighlight code =
+        syntaxHighlight : Code -> Element msg
+        syntaxHighlight (Code code) =
             Source.viewExpression []
                 { highlight = Nothing
                 , buttons = []
@@ -722,11 +756,11 @@ viewSection section =
         )
 
 
-viewMarkdownHtml : String -> Element FrontendMsg
+viewMarkdownHtml : Markdown -> Element FrontendMsg
 viewMarkdownHtml markdown =
     let
-        markdownView : String -> Result String (List (Html.Html msg))
-        markdownView localMarkdown =
+        markdownView : Markdown -> Result String (List (Html.Html msg))
+        markdownView (Markdown localMarkdown) =
             localMarkdown
                 |> Markdown.Parser.parse
                 |> Result.mapError (\error -> error |> List.map Markdown.Parser.deadEndToString |> String.join "\n")
@@ -742,11 +776,11 @@ viewMarkdownHtml markdown =
             Element.text err
 
 
-viewMarkdown : String -> Element FrontendMsg
+viewMarkdown : Markdown -> Element FrontendMsg
 viewMarkdown markdown =
     let
-        markdownView : String -> Result String (List (Element msg))
-        markdownView localMarkdown =
+        markdownView : Markdown -> Result String (List (Element msg))
+        markdownView (Markdown localMarkdown) =
             localMarkdown
                 |> Markdown.Parser.parse
                 |> Result.mapError (\error -> error |> List.map Markdown.Parser.deadEndToString |> String.join "\n")
@@ -761,8 +795,8 @@ viewMarkdown markdown =
             Element.text err
 
 
-viewOutput : String -> Element FrontendMsg
-viewOutput output =
+viewOutput : Output -> Element FrontendMsg
+viewOutput (Output output) =
     Element.column
         [ monospace
         , Font.size 24

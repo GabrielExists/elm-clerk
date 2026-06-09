@@ -1,8 +1,9 @@
 module Backend exposing (Model, app)
 
 import FastDict as Dict
-import Lamdera exposing (ClientId, SessionId)
-import Types exposing (BackendModel, BackendMsg(..), ToBackend(..))
+import Interactives exposing (interactivesEmpty)
+import Lamdera exposing (ClientId, SessionId, sendToFrontend)
+import Types exposing (BackendModel, BackendMsg(..), FrontendMsg(..), ToBackend(..), ToFrontend(..))
 
 
 type alias Model =
@@ -21,7 +22,7 @@ app =
 init : ( Model, Cmd BackendMsg )
 init =
     ( { message = "Hello!"
-      , placeholderOutput = Dict.empty
+      , interactives = interactivesEmpty
       }
     , Cmd.none
     )
@@ -35,10 +36,13 @@ update msg model =
 
 
 updateFromFrontend : SessionId -> ClientId -> ToBackend -> Model -> ( Model, Cmd BackendMsg )
-updateFromFrontend _ _ msg model =
+updateFromFrontend _ clientId msg model =
     case msg of
         NoOpToBackend ->
             ( model, Cmd.none )
 
-        OutputToBackend output ->
-            ( { model | placeholderOutput = output }, Cmd.none )
+        InteractivesToBackend interactives ->
+            ( { model | interactives = interactives }, Cmd.none )
+
+        RequestStartup ->
+            ( model, sendToFrontend clientId (Startup model.interactives) )
