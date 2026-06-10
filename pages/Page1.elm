@@ -17,8 +17,13 @@ multiply first second =
     first * second
 
 
-applied =
-    repeat '[' ']' 4 "Word"
+multiply2 first second =
+    first * second
+
+
+applied : Int -> String
+applied repetitions =
+    repeat '[' ']' repetitions "Word"
 
 
 applied2 =
@@ -30,14 +35,21 @@ repeatParen =
     repeat '(' ')'
 
 
+
+-- # This is a title
+-- And here I explain what this function here below does
+
+
 repeat : Char -> Char -> Int -> String -> String
 repeat front end repetitions body =
     String.fromChar front ++ String.repeat repetitions body ++ String.fromChar end
 
 
-repeatBrace : Int -> String
-repeatBrace =
-    repeat '{' '}'
+
+--repeatBrace : Int -> Int
+--repeatBrace =
+--    repeat '{' '}'
+--
 
 
 applyFunction : (Int -> String -> String) -> Int -> String -> String

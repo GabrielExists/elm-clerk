@@ -15,7 +15,6 @@ import Url exposing (Url)
 
 type alias FrontendModel =
     { key : Key
-    , message : String
     , source : FullCode
     , sectionResults : List ( Code, SectionResult )
     , interactives : Interactives
@@ -69,8 +68,12 @@ type RawInteractiveValue
     = RawInteractiveValue String
 
 
-type Output
-    = Output String
+type OutputError
+    = OutputError String
+
+
+type OutputValue
+    = OutputValue String
 
 
 type TypeName
@@ -108,7 +111,7 @@ type ToFrontend
 type Section
     = MarkdownSection Markdown
     | CodeSection Code
-    | EvaluatedSection Code Output
-    | InteractiveSection Code (List (Element FrontendMsg)) Output
+    | EvaluatedSection Code (Result OutputError OutputValue)
+    | InteractiveSection Code (List (Element FrontendMsg)) (Result OutputError OutputValue)
     | HtmlSection Code (Html FrontendMsg)
-    | ErrorSection (List Output)
+    | ErrorSection (List OutputError)
