@@ -502,60 +502,58 @@ handlePartiallyApplied interactiveValues source partiallyApplied declaration =
                 maybePairs =
                     parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
 
-                maybeFunctionName : Maybe FunctionName
-                maybeFunctionName =
-                    nameRef |> Maybe.map qualifiedNameRefToString |> Maybe.map FunctionName
+                --maybeFunctionName : Maybe FunctionName
+                --maybeFunctionName =
+                --    nameRef |> Maybe.map qualifiedNameRefToString |> Maybe.map FunctionName |> Debug.log "maybeFunctionName"
+                functionName : FunctionName
+                functionName =
+                    extractNameFromDeclaration declaration |> FunctionName
 
                 functionOutput : Result OutputError Value
                 functionOutput =
-                    case maybeFunctionName of
-                        Nothing ->
-                            Err (OutputError "No function name")
-
-                        Just functionName ->
+                    let
+                        insertIntoValues : ( ParameterName, TypeName ) -> Dict String Value -> Dict String Value
+                        insertIntoValues ( ParameterName binding, TypeName typeName ) localValues =
                             let
-                                insertIntoValues : ( ParameterName, TypeName ) -> Dict String Value -> Dict String Value
-                                insertIntoValues ( ParameterName binding, TypeName typeName ) localValues =
-                                    let
-                                        maybeTypeNode : Maybe InteractiveElement
-                                        maybeTypeNode =
-                                            Dict.get typeName typeNodeMap
+                                maybeTypeNode : Maybe InteractiveElement
+                                maybeTypeNode =
+                                    Dict.get typeName typeNodeMap
 
-                                        maybeRawValue : Maybe RawInteractiveValue
-                                        maybeRawValue =
-                                            interactivesGet ( functionName, ParameterName binding ) interactiveValues
+                                maybeRawValue : Maybe RawInteractiveValue
+                                maybeRawValue =
+                                    interactivesGet ( functionName, ParameterName binding ) interactiveValues
 
-                                        typeNodeToValue : InteractiveElement -> RawInteractiveValue -> Result OutputError Value
-                                        typeNodeToValue typeNode rawValue =
-                                            typeNode.conversion rawValue
+                                typeNodeToValue : InteractiveElement -> RawInteractiveValue -> Result OutputError Value
+                                typeNodeToValue typeNode rawValue =
+                                    typeNode.conversion rawValue
 
-                                        maybeValue : Maybe (Result OutputError Value)
-                                        maybeValue =
-                                            Maybe.map2 typeNodeToValue maybeTypeNode maybeRawValue
-                                    in
-                                    case maybeValue of
-                                        Just (Ok value) ->
-                                            Dict.insert binding value localValues
-
-                                        _ ->
-                                            localValues
-
-                                newEnv : Env
-                                newEnv =
-                                    case maybePairs of
-                                        Err _ ->
-                                            env
-
-                                        Ok pairs ->
-                                            { env
-                                                | values =
-                                                    List.foldl
-                                                        insertIntoValues
-                                                        env.values
-                                                        pairs
-                                            }
+                                maybeValue : Maybe (Result OutputError Value)
+                                maybeValue =
+                                    Maybe.map2 typeNodeToValue maybeTypeNode maybeRawValue
                             in
-                            evaluate (Ok newEnv) expression
+                            case maybeValue of
+                                Just (Ok value) ->
+                                    Dict.insert binding value localValues
+
+                                _ ->
+                                    localValues
+
+                        newEnv : Env
+                        newEnv =
+                            case maybePairs of
+                                Err _ ->
+                                    env
+
+                                Ok pairs ->
+                                    { env
+                                        | values =
+                                            List.foldl
+                                                insertIntoValues
+                                                env.values
+                                                pairs
+                                    }
+                    in
+                    evaluate (Ok newEnv) expression
 
                 --debugElements : List (Element msg)
                 --debugElements =
@@ -566,23 +564,17 @@ handlePartiallyApplied interactiveValues source partiallyApplied declaration =
                 --    ]
                 interactiveElements : Result OutputError (List (Element FrontendMsg))
                 interactiveElements =
-                    case maybeFunctionName of
-                        Nothing ->
-                            OutputError "No name in function"
+                    case maybePairs of
+                        Ok pairs ->
+                            pairs
+                                |> Result.Extra.combineMap (viewInteractive interactiveValues functionName)
+                                |> Result.Extra.extract (\error -> viewOutputError error |> List.singleton)
+                                |> Ok
+
+                        --|> Result.withDefault (\x -> x |> viewOutput |> List.singleton)
+                        Err error ->
+                            error
                                 |> Err
-
-                        Just functionName ->
-                            case maybePairs of
-                                Ok pairs ->
-                                    pairs
-                                        |> Result.Extra.combineMap (viewInteractive interactiveValues functionName)
-                                        |> Result.Extra.extract (\error -> viewOutputError error |> List.singleton)
-                                        |> Ok
-
-                                --|> Result.withDefault (\x -> x |> viewOutput |> List.singleton)
-                                Err error ->
-                                    error
-                                        |> Err
             in
             case interactiveElements of
                 Err output ->
