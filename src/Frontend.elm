@@ -32,8 +32,10 @@ import Markdown.Renderer
 import Markdown.Renderer.ElmUi
 import Parser exposing (DeadEnd)
 import ParserFast
+import Process
 import Regex
 import Result.Extra
+import Task
 import ToString exposing (annotationToString, deadEndsToStrings, evalErrorKindToString, patternToString)
 import Types exposing (BackendMsg(..), Cell(..), Code(..), FrontendModel, FrontendMsg(..), FullCode(..), FunctionName(..), Interactives(..), Markdown(..), OutputError(..), OutputValue(..), ParameterName(..), ParsedSection, RawInteractiveValue(..), Section(..), ToBackend(..), ToFrontend(..), TypeName(..))
 import UI.Source as Source
@@ -66,7 +68,8 @@ init _ key =
     ( { key = key
       , source = FullCode ""
       , parsedSections = []
-      , interactives = interactivesEmpty
+      , evalInteractives = interactivesEmpty
+      , inputInteractives = interactivesEmpty
       }
     , Cmd.batch
         [ Http.get
@@ -122,9 +125,21 @@ update msg model =
         InteractiveUpdated names value ->
             let
                 newInteractives =
-                    interactivesInsert names value model.interactives
+                    interactivesInsert names value model.inputInteractives
             in
-            ( { model | interactives = newInteractives }, sendToBackend (InteractivesToBackend newInteractives) )
+            ( { model | inputInteractives = newInteractives }
+            , Cmd.batch
+                [ sendToBackend (InteractivesToBackend newInteractives)
+                , notifyIn ReloadCode 10
+                ]
+            )
+
+        ReloadCode ->
+            ( { model | evalInteractives = model.inputInteractives }, Cmd.none )
+
+
+
+--( model, Cmd.none )
 
 
 updateFromBackend : ToFrontend -> Model -> ( Model, Cmd FrontendMsg )
@@ -134,7 +149,13 @@ updateFromBackend msg model =
             ( model, Cmd.none )
 
         Startup interactives ->
-            ( { model | interactives = interactives }, Cmd.none )
+            ( { model | evalInteractives = interactives }, Cmd.none )
+
+
+notifyIn : FrontendMsg -> Float -> Cmd FrontendMsg
+notifyIn msg time =
+    Process.sleep time
+        |> Task.attempt (\_ -> msg)
 
 
 
@@ -188,7 +209,7 @@ evaluateSections model =
 
         evaluateSection sectionResult =
             sectionResult
-                |> sectionFromParsed model.interactives maybeEnv
+                |> sectionFromParsed model.evalInteractives model.inputInteractives maybeEnv
     in
     model.parsedSections |> List.map evaluateSection
 
@@ -207,8 +228,8 @@ makeEnv (FullCode source) =
     Result.andThen Eval.Module.buildInitialEnv fileMappedError
 
 
-sectionFromParsed : Interactives -> Result Error Env -> ( Code, Result error (List Cell) ) -> Section
-sectionFromParsed interactiveValues maybeEnv ( source, parsedSection ) =
+sectionFromParsed : Interactives -> Interactives -> Result Error Env -> ( Code, Result error (List Cell) ) -> Section
+sectionFromParsed evalInteractives inputInteractives maybeEnv ( source, parsedSection ) =
     case parsedSection of
         Ok cells ->
             let
@@ -261,7 +282,7 @@ sectionFromParsed interactiveValues maybeEnv ( source, parsedSection ) =
                             EvaluatedSection source (Err error)
 
                         Ok ((PartiallyApplied _ _ _ _ _) as functionDeclaration) ->
-                            handlePartiallyApplied interactiveValues source functionDeclaration declaration
+                            handlePartiallyApplied evalInteractives inputInteractives source functionDeclaration declaration
 
                         Ok value ->
                             handleSuccessfulParse source value
@@ -298,10 +319,10 @@ sectionFromParsed interactiveValues maybeEnv ( source, parsedSection ) =
 -- EVALUATION
 
 
-handlePartiallyApplied : Interactives -> Code -> Value -> Declaration -> Section
-handlePartiallyApplied interactiveValues source partiallyApplied declaration =
+handlePartiallyApplied : Interactives -> Interactives -> Code -> Value -> Declaration -> Section
+handlePartiallyApplied evalInteractives inputInteractives source partiallyApplied declaration =
     case partiallyApplied of
-        PartiallyApplied baseEnv alreadyApplied patterns nameRef expression ->
+        PartiallyApplied baseEnv alreadyApplied patterns _ expression ->
             let
                 maybePairs : Result OutputError (List ( ParameterName, TypeName ))
                 maybePairs =
@@ -319,6 +340,32 @@ handlePartiallyApplied interactiveValues source partiallyApplied declaration =
                 insertIntoEnvFromValue ( ParameterName binding, value ) localValues =
                     Dict.insert binding value localValues
 
+                insertIntoEnvFromType : ( ParameterName, TypeName ) -> Dict String Value -> Result OutputError (Dict String Value)
+                insertIntoEnvFromType ( ParameterName binding, TypeName typeName ) localValues =
+                    let
+                        maybeTypeNode : Maybe InteractiveElement
+                        maybeTypeNode =
+                            Dict.get typeName typeNodeMap
+
+                        maybeRawValue : Maybe RawInteractiveValue
+                        maybeRawValue =
+                            interactivesGet ( functionName, ParameterName binding ) evalInteractives
+
+                        typeNodeToValue : InteractiveElement -> RawInteractiveValue -> Result OutputError Value
+                        typeNodeToValue typeNode rawValue =
+                            typeNode.conversion rawValue
+
+                        maybeValue : Maybe (Result OutputError Value)
+                        maybeValue =
+                            Maybe.map2 typeNodeToValue maybeTypeNode maybeRawValue
+                    in
+                    case maybeValue of
+                        Just (Ok value) ->
+                            Dict.insert binding value localValues |> Ok
+
+                        _ ->
+                            ("Missing \"" ++ binding ++ "\"") |> OutputError |> Err
+
                 updateEnvFromValues : Env -> Env
                 updateEnvFromValues env =
                     case maybeValuePairs of
@@ -334,57 +381,39 @@ handlePartiallyApplied interactiveValues source partiallyApplied declaration =
                                         pairs
                             }
 
-                insertIntoEnvFromType : ( ParameterName, TypeName ) -> Dict String Value -> Dict String Value
-                insertIntoEnvFromType ( ParameterName binding, TypeName typeName ) localValues =
-                    let
-                        maybeTypeNode : Maybe InteractiveElement
-                        maybeTypeNode =
-                            Dict.get typeName typeNodeMap
-
-                        maybeRawValue : Maybe RawInteractiveValue
-                        maybeRawValue =
-                            interactivesGet ( functionName, ParameterName binding ) interactiveValues
-
-                        typeNodeToValue : InteractiveElement -> RawInteractiveValue -> Result OutputError Value
-                        typeNodeToValue typeNode rawValue =
-                            typeNode.conversion rawValue
-
-                        maybeValue : Maybe (Result OutputError Value)
-                        maybeValue =
-                            Maybe.map2 typeNodeToValue maybeTypeNode maybeRawValue
-                    in
-                    case maybeValue of
-                        Just (Ok value) ->
-                            Dict.insert binding value localValues
-
-                        _ ->
-                            localValues
-
-                updateEnvFromType : Env -> Env
+                updateEnvFromType : Env -> Result OutputError Env
                 updateEnvFromType env =
                     case maybePairs of
                         Err _ ->
-                            env
+                            Ok env
 
                         Ok pairs ->
-                            { env
-                                | values =
-                                    List.foldl
-                                        insertIntoEnvFromType
-                                        env.values
-                                        pairs
-                            }
+                            case
+                                Result.Extra.foldlWhileOk
+                                    insertIntoEnvFromType
+                                    env.values
+                                    pairs
+                            of
+                                Ok newValues ->
+                                    { env
+                                        | values = newValues
+                                    }
+                                        |> Ok
+
+                                Err err ->
+                                    Err err
 
                 functionOutput : Result OutputError Value
                 functionOutput =
-                    evaluate (Ok (baseEnv |> updateEnvFromValues |> updateEnvFromType)) expression
+                    (baseEnv |> updateEnvFromValues |> updateEnvFromType)
+                        |> Result.andThen (\env -> evaluate (Ok env) expression)
 
                 interactiveElements : Result OutputError (List (Element FrontendMsg))
                 interactiveElements =
                     case ( maybePairs, maybeValuePairs ) of
                         ( Ok pairs, Ok _ ) ->
                             pairs
-                                |> Result.Extra.combineMap (viewInteractive interactiveValues functionName)
+                                |> Result.Extra.combineMap (viewInteractive inputInteractives functionName)
                                 |> Result.Extra.extract (\error -> viewOutputError error |> List.singleton)
                                 |> Ok
 
@@ -594,22 +623,6 @@ type alias InteractiveElement =
     }
 
 
-textElement typeName ( functionName, ParameterName parameterName ) maybeRawValue =
-    let
-        maybeValue =
-            maybeRawValue |> Maybe.map (\(RawInteractiveValue x) -> x)
-    in
-    Element.row [ Element.padding 6 ]
-        [ Element.Input.text
-            []
-            { onChange = \x -> InteractiveUpdated ( functionName, ParameterName parameterName ) (RawInteractiveValue x)
-            , text = Maybe.withDefault "" maybeValue
-            , placeholder = Nothing
-            , label = Element.Input.labelAbove [ monospace ] (Element.text (parameterName ++ " : " ++ typeName ++ " = " ++ Maybe.withDefault "" maybeValue))
-            }
-        ]
-
-
 interactiveElementInt : InteractiveElement
 interactiveElementInt =
     let
@@ -661,6 +674,23 @@ interactiveElementString =
     , conversion = conversion
     , element = textElement "String"
     }
+
+
+textElement typeName ( functionName, ParameterName parameterName ) maybeRawValue =
+    let
+        maybeValue : Maybe String
+        maybeValue =
+            maybeRawValue |> Maybe.map (\(RawInteractiveValue x) -> x)
+    in
+    Element.row [ Element.padding 6 ]
+        [ Element.Input.text
+            []
+            { onChange = \x -> InteractiveUpdated ( functionName, ParameterName parameterName ) (RawInteractiveValue x)
+            , text = Maybe.withDefault "" maybeValue
+            , placeholder = Nothing
+            , label = Element.Input.labelAbove [ monospace ] (Element.text (parameterName ++ " : " ++ typeName ++ " = " ++ Maybe.withDefault "" maybeValue))
+            }
+        ]
 
 
 

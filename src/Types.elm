@@ -17,7 +17,8 @@ type alias FrontendModel =
     { key : Key
     , source : FullCode
     , parsedSections : List ( Code, ParsedSection )
-    , interactives : Interactives
+    , inputInteractives : Interactives
+    , evalInteractives : Interactives
     }
 
 
@@ -91,6 +92,7 @@ type FrontendMsg
     | GotText (Result Http.Error String)
     | WroteText (Result Http.Error ())
     | InteractiveUpdated ( FunctionName, ParameterName ) RawInteractiveValue
+    | ReloadCode
 
 
 type ToBackend
