@@ -2,7 +2,7 @@ module Frontend exposing (Model, app)
 
 import Browser exposing (UrlRequest(..))
 import Browser.Navigation as Nav
-import Element exposing (Attribute, Element, fill, paddingEach, px, width)
+import Element exposing (Attribute, Element, fill, paddingEach, width)
 import Element.Background
 import Element.Font as Font
 import Element.Input
@@ -34,7 +34,7 @@ import Parser exposing (DeadEnd)
 import ParserFast
 import Regex
 import Result.Extra
-import ToString exposing (annotationToString, deadEndsToStrings, evalErrorKindToString, patternToString, patternToStringDebug, qualifiedNameRefToString)
+import ToString exposing (annotationToString, deadEndsToStrings, evalErrorKindToString, patternToString)
 import Types exposing (BackendMsg(..), Cell(..), Code(..), FrontendModel, FrontendMsg(..), FullCode(..), FunctionName(..), Interactives(..), Markdown(..), OutputError(..), OutputValue(..), ParameterName(..), RawInteractiveValue(..), Section(..), SectionResult, ToBackend(..), ToFrontend(..), TypeName(..))
 import UI.Source as Source
 import Url
@@ -129,7 +129,7 @@ update msg model =
                 newInteractives =
                     interactivesInsert names value model.interactives
             in
-            ( { model | interactives = Debug.log "Updated dict:" newInteractives }, sendToBackend (InteractivesToBackend newInteractives) )
+            ( { model | interactives = newInteractives }, sendToBackend (InteractivesToBackend newInteractives) )
 
 
 updateFromBackend : ToFrontend -> Model -> ( Model, Cmd FrontendMsg )
@@ -167,17 +167,6 @@ cellsFromSource (FullCode fullSource) =
     Regex.split newSectionRegex
         fullSource
         |> List.map (\source -> ( Code source, parseSection (Code source) ))
-
-
-
---|> (\list ->
---        case maybeEnv of
---            Err (ParsingError deadEnds) ->
---                ErrorSection (deadEndsToStrings deadEnds) :: list
---
---            _ ->
---                list
---   )
 
 
 plaintextFromSections : List ( Code, SectionResult ) -> String
@@ -502,7 +491,7 @@ viewInteractive : Interactives -> FunctionName -> ( ParameterName, TypeName ) ->
 viewInteractive interactiveValues functionName ( binding, TypeName typeName ) =
     let
         maybeValue =
-            interactivesGet (Debug.log "Fetching" ( functionName, binding )) (Debug.log "From" interactiveValues) |> Debug.log "Got"
+            interactivesGet ( functionName, binding ) interactiveValues
 
         (ParameterName bindingString) =
             binding
@@ -518,12 +507,8 @@ viewInteractive interactiveValues functionName ( binding, TypeName typeName ) =
 handlePartiallyApplied : Interactives -> Code -> Value -> Declaration -> Section
 handlePartiallyApplied interactiveValues source partiallyApplied declaration =
     case partiallyApplied of
-        PartiallyApplied env alreadyApplied patterns nameRef expression ->
+        PartiallyApplied baseEnv alreadyApplied patterns nameRef expression ->
             let
-                numApplied : Int
-                numApplied =
-                    List.length alreadyApplied
-
                 maybePairs : Result OutputError (List ( ParameterName, TypeName ))
                 maybePairs =
                     parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
@@ -532,20 +517,17 @@ handlePartiallyApplied interactiveValues source partiallyApplied declaration =
                 maybeValuePairs =
                     parseValuesTogether (patterns |> List.map Node.value) alreadyApplied
 
-                --maybeFunctionName : Maybe FunctionName
-                --maybeFunctionName =
-                --    nameRef |> Maybe.map qualifiedNameRefToString |> Maybe.map FunctionName |> Debug.log "maybeFunctionName"
                 functionName : FunctionName
                 functionName =
                     extractNameFromDeclaration declaration |> FunctionName
 
                 insertIntoEnvFromValue : ( ParameterName, Value ) -> Dict String Value -> Dict String Value
                 insertIntoEnvFromValue ( ParameterName binding, value ) localValues =
-                    Dict.insert (Debug.log "Binding from Value" binding) (Debug.log "value" value) localValues
+                    Dict.insert binding value localValues
 
-                newEnv1 : Env
-                newEnv1 =
-                    case Debug.log "maybeValuePairs" maybeValuePairs of
+                updateEnvFromValues : Env -> Env
+                updateEnvFromValues env =
+                    case maybeValuePairs of
                         Err _ ->
                             env
 
@@ -579,19 +561,19 @@ handlePartiallyApplied interactiveValues source partiallyApplied declaration =
                     in
                     case maybeValue of
                         Just (Ok value) ->
-                            Dict.insert (Debug.log "Binding from type" binding) (Debug.log "value" value) localValues
+                            Dict.insert binding value localValues
 
                         _ ->
                             localValues
 
-                newEnv : Env
-                newEnv =
+                updateEnvFromType : Env -> Env
+                updateEnvFromType env =
                     case maybePairs of
                         Err _ ->
-                            newEnv1
+                            env
 
                         Ok pairs ->
-                            { newEnv1
+                            { env
                                 | values =
                                     List.foldl
                                         insertIntoEnvFromType
@@ -601,15 +583,8 @@ handlePartiallyApplied interactiveValues source partiallyApplied declaration =
 
                 functionOutput : Result OutputError Value
                 functionOutput =
-                    evaluate (Ok (Debug.log "newEnv" newEnv)) expression
+                    evaluate (Ok (baseEnv |> updateEnvFromValues |> updateEnvFromType)) expression
 
-                --debugElements : List (Element msg)
-                --debugElements =
-                --    [ partiallyApplied
-                --        |> functionDeclarationToString
-                --        |> viewOutput
-                --    , viewOutput together
-                --    ]
                 interactiveElements : Result OutputError (List (Element FrontendMsg))
                 interactiveElements =
                     case ( maybePairs, maybeValuePairs ) of
