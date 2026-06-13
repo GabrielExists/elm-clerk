@@ -26,6 +26,7 @@ import Kernel.String
 import Kernel.Utils
 import Maybe.Extra
 import Value exposing (typeError)
+import VirtualDom
 
 
 type alias EvalFunction =
@@ -181,8 +182,10 @@ functions evalFunction =
     -- Elm.Kernel.VirtualDom
     , ( [ "Elm", "Kernel", "VirtualDom" ]
       , [ ( "node", three string (list attr) (list html) to html Kernel.Html.node Core.VirtualDom.node )
+        , ( "nodeNS", four string string (list attr) (list html) to html Kernel.Html.nodeNS Core.VirtualDom.nodeNS )
         , ( "text", one string to html Kernel.Html.text Core.VirtualDom.node )
         , ( "style", two string string to attr Kernel.Html.style Core.VirtualDom.style )
+        , ( "attribute", two string string to attr Kernel.Html.attribute Core.VirtualDom.attribute )
         ]
       )
     ]
@@ -504,7 +507,12 @@ html =
         \value ->
             case value of
                 Custom [ "Html" ] "Node" [ String name, attrsValue, nodesValue ] ->
-                    Maybe.map2 (Node name)
+                    Maybe.map2 (HtmlPlain name)
+                        (attrsValue |> (list attr).fromValue)
+                        (nodesValue |> (list html).fromValue)
+
+                Custom [ "Html" ] "NodeNS" [ String namespace, String tag, attrsValue, nodesValue ] ->
+                    Maybe.map2 (HtmlNS namespace tag)
                         (attrsValue |> (list attr).fromValue)
                         (nodesValue |> (list html).fromValue)
 
@@ -516,10 +524,19 @@ html =
     , toValue =
         \node ->
             case node of
-                Node name attrs htmls ->
+                HtmlPlain name attrs htmls ->
                     Custom [ "Html" ]
                         "Node"
                         [ name |> string.toValue
+                        , attrs |> (list attr).toValue
+                        , htmls |> (list html).toValue
+                        ]
+
+                HtmlNS namespace tag attrs htmls ->
+                    Custom [ "Html" ]
+                        "NodeNS"
+                        [ namespace |> string.toValue
+                        , tag |> string.toValue
                         , attrs |> (list attr).toValue
                         , htmls |> (list html).toValue
                         ]
@@ -535,6 +552,9 @@ attr =
     { fromValue =
         \value ->
             case value of
+                Custom [ "Html" ] "Style" [ String first, String second ] ->
+                    Style first second |> Just
+
                 Custom [ "Html" ] "Attribute" [ String first, String second ] ->
                     Attribute first second |> Just
 
@@ -546,6 +566,9 @@ attr =
     , toValue =
         \item ->
             case item of
+                Style first second ->
+                    Custom [ "Html" ] "Style" [ String first, String second ]
+
                 Attribute first second ->
                     Custom [ "Html" ] "Attribute" [ String first, String second ]
 
@@ -739,6 +762,71 @@ threeWithError firstSelector secondSelector thirdSelector _ output f implementat
 
                     _ ->
                         err (String.join ", " (List.map Value.toString args))
+
+            [ _, _ ] ->
+                partiallyApply moduleName args implementation
+
+            [ _ ] ->
+                partiallyApply moduleName args implementation
+
+            [] ->
+                partiallyApply moduleName args implementation
+
+            _ ->
+                err ("[ " ++ String.join ", " (List.map Value.toString args) ++ " ]")
+    )
+
+
+four :
+    InSelector a xa
+    -> InSelector b xb
+    -> InSelector c xc
+    -> InSelector d xd
+    -> To
+    -> OutSelector out xo
+    -> (a -> b -> c -> d -> out)
+    -> FunctionImplementation
+    -> ModuleName
+    -> ( Int, List Value -> Eval Value )
+four firstSelector secondSelector thirdSelector fourthSelector _ output f =
+    fourWithError firstSelector secondSelector thirdSelector fourthSelector To output (\l m1 m2 r _ _ -> EvalResult.succeed (f l m1 m2 r))
+
+
+fourWithError :
+    InSelector a xa
+    -> InSelector b xb
+    -> InSelector c xc
+    -> InSelector d xd
+    -> To
+    -> OutSelector out xo
+    -> (a -> b -> c -> d -> Eval out)
+    -> FunctionImplementation
+    -> ModuleName
+    -> ( Int, List Value -> Eval Value )
+fourWithError firstSelector secondSelector thirdSelector fourthSelector _ output f implementation moduleName =
+    ( 3
+    , \args cfg env ->
+        let
+            err : String -> EvalResult value
+            err got =
+                if firstSelector.name == secondSelector.name && secondSelector.name == thirdSelector.name && thirdSelector.name == fourthSelector.name then
+                    EvalResult.fail <| typeError env <| "Expected four " ++ firstSelector.name ++ "s, got " ++ got
+
+                else
+                    EvalResult.fail <| typeError env <| "Expected one " ++ firstSelector.name ++ ", one " ++ secondSelector.name ++ ", one " ++ thirdSelector.name ++ "  and one " ++ fourthSelector.name ++ ", got " ++ got
+        in
+        case args of
+            [ firstArg, secondArg, thirdArg, fourthArg ] ->
+                case ( ( firstSelector.fromValue firstArg, secondSelector.fromValue secondArg ), ( thirdSelector.fromValue thirdArg, fourthSelector.fromValue fourthArg ) ) of
+                    ( ( Just first, Just second ), ( Just third, Just fourth ) ) ->
+                        f first second third fourth cfg env
+                            |> EvalResult.map output.toValue
+
+                    _ ->
+                        err (String.join ", " (List.map Value.toString args))
+
+            [ _, _, _ ] ->
+                partiallyApply moduleName args implementation
 
             [ _, _ ] ->
                 partiallyApply moduleName args implementation

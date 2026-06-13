@@ -22,7 +22,7 @@ import Eval.Expression
 import Eval.Module
 import FastDict as Dict exposing (Dict)
 import Html
-import Html.Attributes
+import Html.Attributes exposing (style)
 import Http
 import Interactives exposing (interactivesEmpty, interactivesGet, interactivesInsert)
 import InterpreterTypes exposing (Env, Error(..), Value(..))
@@ -254,16 +254,6 @@ sectionFromParsed evalInteractives inputInteractives maybeEnv ( source, parsedSe
 
                         _ ->
                             False
-
-                handleSuccessfulParse : Code -> Value -> Section
-                handleSuccessfulParse localSource value =
-                    case Kernel.html.fromValue value of
-                        Just html ->
-                            Kernel.Html.htmlToReal html
-                                |> HtmlSection localSource
-
-                        _ ->
-                            EvaluatedSection localSource (Value.toString value |> OutputValue |> Ok)
             in
             case lastCode of
                 Just (CellDeclaration (Node _ declaration)) ->
@@ -284,7 +274,7 @@ sectionFromParsed evalInteractives inputInteractives maybeEnv ( source, parsedSe
                             handlePartiallyApplied evalInteractives inputInteractives source functionDeclaration declaration
 
                         Ok value ->
-                            handleSuccessfulParse source value
+                            EvaluatedSection source (value |> OutputValue |> Ok)
 
                 --EvaluatedSection source evaluated
                 _ ->
@@ -433,7 +423,7 @@ handlePartiallyApplied evalInteractives inputInteractives source partiallyApplie
                         Ok functionOutputOk ->
                             InteractiveSection source
                                 elements
-                                (Value.toString functionOutputOk |> OutputValue |> Ok)
+                                (functionOutputOk |> OutputValue |> Ok)
 
                         Err functionOutputError ->
                             InteractiveSection source elements (Err functionOutputError)
@@ -780,7 +770,9 @@ view model =
                     :: (evaluateSections model
                             |> List.map (Element.Lazy.lazy viewSection)
                        )
-                    ++ [ viewChart ]
+                    ++ [ Element.html <|
+                            Html.div [ style "display" "inline-block", style "background-color" "black", style "width" "16px", style "height" "16px" ] []
+                       ]
                 )
             )
         ]
@@ -859,9 +851,6 @@ viewSection section =
                         viewOutputError value
                 ]
 
-            HtmlSection code html ->
-                [ syntaxHighlight code, Element.html html ]
-
             ErrorSection error ->
                 List.map viewOutputError error
         )
@@ -907,8 +896,15 @@ viewMarkdown markdown =
 
 
 viewOutputValue : OutputValue -> Element FrontendMsg
-viewOutputValue (OutputValue output) =
-    viewOutput ("-> " ++ output)
+viewOutputValue (OutputValue value) =
+    case Kernel.html.fromValue value of
+        Just html ->
+            Kernel.Html.htmlToReal html
+                |> Element.html
+                |> Element.el [ Element.paddingEach { top = 12, right = graySidePadding, bottom = 4, left = graySidePadding } ]
+
+        _ ->
+            viewOutput ("-> " ++ Value.toString value)
 
 
 viewOutputError : OutputError -> Element FrontendMsg

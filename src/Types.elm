@@ -8,7 +8,7 @@ import Elm.Syntax.Node exposing (Node)
 import FastDict as Dict exposing (Dict)
 import Html exposing (Html)
 import Http
-import InterpreterTypes
+import InterpreterTypes exposing (Value)
 import Parser exposing (DeadEnd)
 import Url exposing (Url)
 
@@ -74,7 +74,7 @@ type OutputError
 
 
 type OutputValue
-    = OutputValue String
+    = OutputValue Value
 
 
 type TypeName
@@ -115,5 +115,4 @@ type Section
     | CodeSection Code
     | EvaluatedSection Code (Result OutputError OutputValue)
     | InteractiveSection Code (List (Element FrontendMsg)) (Result OutputError OutputValue)
-    | HtmlSection Code (Html FrontendMsg)
     | ErrorSection (List OutputError)
