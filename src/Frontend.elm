@@ -29,7 +29,7 @@ import FastDict as Dict exposing (Dict)
 import Hash
 import Html
 import Html.Attributes exposing (style)
-import Http exposing (Error(..))
+import Http
 import Interactives exposing (interactivesEmpty, interactivesGet, interactivesInsert)
 import InterpreterTypes exposing (Env, Error(..), Eval, Value(..))
 import Kernel
@@ -45,7 +45,7 @@ import Process
 import Regex
 import Result.Extra
 import Task
-import ToString exposing (annotationToString, deadEndsToStrings, errorToString, evalErrorDataToString, evalErrorKindToString, patternToString)
+import ToString exposing (annotationToString, deadEndsToStrings, errorToString, evalErrorDataToString, evalErrorKindToString, httpErrorToString, patternToString)
 import Types exposing (BackendMsg(..), Cell(..), Code(..), FrontendModel, FrontendMsg(..), FullCode(..), FunctionName(..), Interactives(..), Markdown(..), OutputError(..), OutputValue(..), ParameterName(..), ParsedSection, RawInteractiveValue(..), Section(..), ToBackend(..), ToFrontend(..), TypeName(..))
 import UI.Source as Source
 import Url
@@ -102,11 +102,10 @@ updateFullSource model =
                     source |> Hash.fromString |> Hash.toString
             in
             if checksum == modelChecksum then
-                ( { model | error = checksum ++ ", " ++ modelChecksum }, Cmd.none )
+                ( model, Cmd.none )
 
             else
-                ( { model | error = checksum ++ ", " ++ modelChecksum, checksum = Just checksum }
-                  --( { model | checksum = Just checksum }
+                ( { model | checksum = Just checksum }
                 , Cmd.batch
                     [ sendToBackend (NewChecksumToBackend checksum)
                     ]
@@ -149,25 +148,7 @@ update msg model =
                 Err error ->
                     ( { model
                         | error =
-                            case error of
-                                BadUrl string ->
-                                    "Couldn't fetch source from backend, Badurl, " ++ string
-
-                                Timeout ->
-                                    "Couldn't fetch source from backend, Timeout"
-
-                                NetworkError ->
-                                    "Couldn't fetch source from backend, NetworkError"
-
-                                BadStatus status ->
-                                    if status == 503 then
-                                        "Couldn't fetch source from backend, 503.\nAre you running lamdera with experimental features enabled?\nexperimental=1 lamdera live"
-
-                                    else
-                                        "Couldn't fetch source from backend, " ++ String.fromInt status
-
-                                BadBody string ->
-                                    "Couldn't fetch source from backend, BadBody, " ++ string
+                            httpErrorToString error
                       }
                     , Cmd.none
                     )

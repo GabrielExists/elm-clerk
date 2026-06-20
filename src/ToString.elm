@@ -4,6 +4,7 @@ import Elm.Syntax.Expression exposing (Expression(..))
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Pattern exposing (Pattern(..), QualifiedNameRef)
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
+import Http
 import InterpreterTypes exposing (Error(..), EvalErrorData, Value(..))
 import Parser exposing (DeadEnd)
 import Value
@@ -56,6 +57,29 @@ errorToString error =
 
         EvalError errorData ->
             evalErrorDataToString errorData
+
+
+httpErrorToString : Http.Error -> String
+httpErrorToString error =
+    case error of
+        Http.BadUrl string ->
+            "Couldn't fetch source from backend, Badurl, " ++ string
+
+        Http.Timeout ->
+            "Couldn't fetch source from backend, Timeout"
+
+        Http.NetworkError ->
+            "Couldn't fetch source from backend, NetworkError"
+
+        Http.BadStatus status ->
+            if status == 503 then
+                "Couldn't fetch source from backend, 503.\nAre you running lamdera with experimental features enabled?\nexperimental=1 lamdera live"
+
+            else
+                "Couldn't fetch source from backend, " ++ String.fromInt status
+
+        Http.BadBody string ->
+            "Couldn't fetch source from backend, BadBody, " ++ string
 
 
 functionDeclarationToString : Value -> String
