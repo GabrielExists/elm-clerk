@@ -351,36 +351,8 @@ getHostText fullSource =
 -- SECTIONS EVALUATION
 
 
-type alias Viewer =
-    Value -> Result OutputError (Maybe (Html.Html FrontendMsg))
-
-
 type alias HostViewer =
     Value -> Maybe (Html.Html FrontendMsg)
-
-
-getModuleName : Maybe FullCode -> List (Element FrontendMsg)
-getModuleName maybeSource =
-    case maybeSource of
-        Just source ->
-            let
-                maybeFile : Result Error File
-                maybeFile =
-                    makeFile source
-
-                maybeEnv : Result Error Env
-                maybeEnv =
-                    maybeFile
-                        |> Result.andThen Eval.Module.buildInitialEnv
-
-                moduleName : String
-                moduleName =
-                    String.join "" (Result.withDefault [] (Result.map .currentModule maybeEnv))
-            in
-            [ viewOutputError (OutputError moduleName) ]
-
-        Nothing ->
-            []
 
 
 evaluateSections : Model -> FullCode -> ( List Viewer, List HostViewer, List Section )
@@ -1016,7 +988,6 @@ view model =
                     (Element.text "elm-clerk")
                     :: viewError model.error
                     ++ (model.fileList |> List.map viewListItem)
-                    ++ getModuleName model.source
                     ++ (case ( model.source, model.currentFileName, model.error ) of
                             ( Just source, _, _ ) ->
                                 evaluateSections model source |> viewSections

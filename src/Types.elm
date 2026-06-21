@@ -19,12 +19,17 @@ type alias FrontendModel =
     , currentFileName : Maybe FileName
     , source : Maybe FullCode
     , checksum : Maybe String
-    , parsedSections : List ( Code, ParsedSection )
     , inputInteractives : Interactives
     , evalInteractives : Interactives
     , error : String
     , fileList : List FileName
+
+        , viewers : List Viewer
+        , sections : List ( Code, List Section )
+        , outputs: FastDict String Value
     }
+
+type alias
 
 
 type alias BackendModel =
@@ -38,6 +43,10 @@ type alias BackendModel =
 
 type alias ParsedSection =
     Result (List DeadEnd) (List Cell)
+
+
+type alias Viewer =
+    Value -> Result OutputError (Maybe (Html.Html FrontendMsg))
 
 
 type Cell
