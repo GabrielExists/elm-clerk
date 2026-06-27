@@ -19,6 +19,11 @@ get ( FunctionName functionName, ParameterName parameterName ) (Interactives int
     Dict.get ( functionName, parameterName ) interactives
 
 
+isEmpty : Interactives -> Bool
+isEmpty (Interactives interactives) =
+    Dict.isEmpty interactives
+
+
 
 --interactivesFromList : List ( FunctionName, ParameterName ) -> Interactives
 --interactivesFromList list =

@@ -39,13 +39,14 @@ import List.Extra exposing (Step(..))
 import Markdown.Parser
 import Markdown.Renderer
 import Markdown.Renderer.ElmUi
+import Maybe.Extra
 import Parser exposing (DeadEnd)
 import ParserFast
 import Regex
 import Result.Extra
 import Task
 import ToString exposing (annotationToString, errorToString, evalErrorDataToString, httpErrorToString, patternToString)
-import Types exposing (BackendMsg(..), Cell(..), Code(..), FileName(..), FrontendModel, FrontendMsg(..), FullCode(..), FunctionName(..), HostViewer, Interactives(..), Markdown(..), Output, OutputError(..), OutputValue(..), ParameterName(..), ParsedSection, RawInteractiveValue(..), Section(..), ToBackend(..), ToFrontend(..), TypeName(..), Viewer)
+import Types exposing (BackendMsg(..), Cell(..), Code(..), FileName(..), FrontendModel, FrontendMsg(..), FullCode(..), Function, FunctionName(..), HostViewer, Interactives(..), Markdown(..), Output, OutputError(..), OutputValue(..), ParameterName(..), ParsedSection, RawInteractiveValue(..), Section(..), ToBackend(..), ToFrontend(..), TypeName(..), Viewer)
 import UI.Source as Source
 import Url
 import Value
@@ -137,7 +138,8 @@ generateInteractive source model =
             evaluateSections model source maybeEnv
     in
     { model
-        | functions = functions
+        | source = Just source
+        , functions = functions
         , viewers = viewers
         , hostViewers = makeHostViewers maybeEnv
         , sections = sections
@@ -168,7 +170,7 @@ update msg model =
         GotText result ->
             case result of
                 Ok source ->
-                    ( generateInteractive (FullCode source) model, Cmd.none )
+                    Debug.log "( generateInteractive (FullCode source) model, notifyIn CheckGenerateOutputs 100 )" ( generateInteractive (FullCode source) model, notifyIn CheckGenerateOutputs 100 )
 
                 Err error ->
                     ( { model
@@ -211,20 +213,35 @@ update msg model =
                 newInteractives =
                     Interactives.insert names value model.inputInteractives
 
-                --function =
-                --    Dict.get (Tuple.first names) model.functions
-                --
-                --newOutput : Interactives -> PartiallyAppliedFunction -> Declaration -> Output
-                --newOutput =
-                --    applyPartiallyApplied
-                --        newInteractives
+                (FunctionName functionName) =
+                    Tuple.first names
+
+                newOutput : Result OutputError OutputValue
+                newOutput =
+                    calculateOutput newInteractives model.functions (Tuple.first names)
             in
-            ( { model | inputInteractives = newInteractives }
+            ( { model | inputInteractives = newInteractives, outputs = Dict.insert functionName newOutput model.outputs }
             , Cmd.batch
                 [ sendToBackend (InteractivesToBackend newInteractives)
                 , notifyIn ReloadCode 100
                 ]
             )
+
+        CheckGenerateOutputs ->
+            case Debug.log "( Dict.isEmpty model.functions, Maybe.Extra.isJust model.source, Dict.isEmpty model.outputs )" ( Dict.isEmpty model.functions, Maybe.Extra.isJust model.source, Dict.isEmpty model.outputs ) of
+                ( False, True, True ) ->
+                    let
+                        newOutputs =
+                            Dict.map
+                                (\_ ( function, declaration ) ->
+                                    applyPartiallyApplied model.evalInteractives function declaration
+                                )
+                                model.functions
+                    in
+                    ( { model | outputs = newOutputs }, Cmd.none )
+
+                _ ->
+                    ( model, Cmd.none )
 
         ReloadCode ->
             ( { model
@@ -274,7 +291,7 @@ updateFromBackend msg model =
                         requestPage currentFileName
 
                     Nothing ->
-                        Cmd.none
+                        notifyIn CheckGenerateOutputs 100
                 ]
             )
 
@@ -423,7 +440,7 @@ evaluateSections model source maybeEnv =
                 |> Maybe.withDefault []
                 |> List.map transformValue
 
-        evaluateSection : ( Code, ParsedSection ) -> Section
+        evaluateSection : ( Code, ParsedSection ) -> ( Section, Maybe ( FunctionName, Function ) )
         evaluateSection sectionResult =
             sectionFromParsed model.evalInteractives model.inputInteractives maybeEnv sectionResult
 
@@ -447,13 +464,27 @@ evaluateSections model source maybeEnv =
         parsedSections =
             parseSections source
 
-        evaluatedSections : List Section
-        evaluatedSections =
-            parsedSections |> List.map evaluateSection
+        ( evaluatedSections, functions ) =
+            parsedSections
+                |> List.foldr
+                    (\item ( list, currentFunctions ) ->
+                        let
+                            ( value, maybeFunction ) =
+                                evaluateSection item
 
-        functions : Dict String Types.Function
-        functions =
-            Dict.empty
+                            newFunctions =
+                                case maybeFunction of
+                                    Just ( FunctionName name, function ) ->
+                                        Dict.insert name function currentFunctions
+
+                                    Nothing ->
+                                        currentFunctions
+                        in
+                        ( value :: list, newFunctions )
+                    )
+                    ( [], Dict.empty )
+
+        --parsedSections |> List.map evaluateSection
     in
     case viewersError of
         Just error ->
@@ -485,7 +516,7 @@ makeFile (FullCode source) =
     Result.mapError ParsingError file
 
 
-sectionFromParsed : Interactives -> Interactives -> Result Error Env -> ( Code, Result error (List Cell) ) -> Section
+sectionFromParsed : Interactives -> Interactives -> Result Error Env -> ( Code, Result error (List Cell) ) -> ( Section, Maybe ( FunctionName, Function ) )
 sectionFromParsed evalInteractives inputInteractives maybeEnv ( source, parsedSection ) =
     case parsedSection of
         Ok cells ->
@@ -526,18 +557,18 @@ sectionFromParsed evalInteractives inputInteractives maybeEnv ( source, parsedSe
                     in
                     case evaluated of
                         Err error ->
-                            EvaluatedSection source (Err error)
+                            ( EvaluatedSection source (Err error), Nothing )
 
                         Ok (PartiallyApplied functionDeclaration) ->
                             --applyPartiallyApplied evalInteractives inputInteractives source functionDeclaration declaration
-                            InteractiveSection source expressionName
+                            ( InteractiveSection source expressionName, Just ( expressionName, ( functionDeclaration, declaration ) ) )
 
                         Ok value ->
-                            EvaluatedSection source (value |> OutputValue |> Ok)
+                            ( EvaluatedSection source (value |> OutputValue |> Ok), Nothing )
 
                 --EvaluatedSection source evaluated
                 _ ->
-                    List.filter isComment cells
+                    ( List.filter isComment cells
                         |> List.map
                             (\comment ->
                                 case comment of
@@ -558,9 +589,11 @@ sectionFromParsed evalInteractives inputInteractives maybeEnv ( source, parsedSe
                         |> String.join "\n"
                         |> Markdown
                         |> MarkdownSection
+                    , Nothing
+                    )
 
         Err _ ->
-            CodeSection source
+            ( CodeSection source, Nothing )
 
 
 
@@ -685,6 +718,16 @@ sectionFromParsed evalInteractives inputInteractives maybeEnv ( source, parsedSe
 --
 --                Err functionOutputError ->
 --                    InteractiveSection source elements (Err functionOutputError)
+
+
+calculateOutput : Interactives -> Dict String ( PartiallyAppliedFunction, Declaration ) -> FunctionName -> Output
+calculateOutput interactives functions (FunctionName functionName) =
+    case Dict.get functionName functions of
+        Just ( function, declaration ) ->
+            applyPartiallyApplied interactives function declaration
+
+        Nothing ->
+            OutputError "No function stored with this name! This is an internal error." |> Err
 
 
 applyPartiallyApplied : Interactives -> PartiallyAppliedFunction -> Declaration -> Output
@@ -1146,9 +1189,9 @@ view model =
                     ++ (model.fileList |> List.map viewListItem)
                     ++ (case ( model.source, model.currentFileName, model.error ) of
                             ( Just source, _, _ ) ->
-                                --evaluateSections model source |> viewSections
-                                [ Element.text "Source" ]
+                                viewSections model.viewers model.hostViewers model.outputs model.sections
 
+                            --[ Element.text "Source" ]
                             ( _, Nothing, _ ) ->
                                 [ Element.el
                                     [ Font.family

@@ -24,7 +24,7 @@ type alias FrontendModel =
     , sections : List Section
     , inputInteractives : Interactives
     , evalInteractives : Interactives
-    , functions : Dict String PartiallyAppliedFunction
+    , functions : Dict String Function
     , viewers : List Viewer
     , hostViewers : List HostViewer
     , outputs : Dict String Output
@@ -41,7 +41,7 @@ type alias BackendModel =
 
 
 type alias Function =
-    PartiallyAppliedFunction
+    ( PartiallyAppliedFunction, Declaration )
 
 
 type alias Output =
@@ -149,6 +149,7 @@ type FrontendMsg
     | WroteText (Result Http.Error ())
     | ListItemClicked FileName
     | InteractiveUpdated ( FunctionName, ParameterName ) RawInteractiveValue
+    | CheckGenerateOutputs
     | ReloadCode
     | Poll
     | NewScroll Float
