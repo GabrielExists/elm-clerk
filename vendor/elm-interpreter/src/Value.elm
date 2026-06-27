@@ -4,7 +4,7 @@ import Array exposing (Array)
 import Elm.Syntax.Expression as Expression exposing (Expression)
 import Elm.Syntax.Node as Node exposing (Node)
 import FastDict as Dict
-import InterpreterTypes exposing (Env, EvalErrorData, EvalErrorKind(..), Value(..))
+import InterpreterTypes exposing (Env, EvalErrorData, EvalErrorKind(..), PartiallyAppliedFunction(..), Value(..))
 
 
 typeError : Env -> String -> EvalErrorData
@@ -98,10 +98,10 @@ toExpression value =
             JsArray array ->
                 arrayToExpression "JsArray" (Array.toList array)
 
-            PartiallyApplied _ [] _ (Just qualifiedName) _ ->
+            PartiallyApplied (PartiallyAppliedFunction _ [] _ (Just qualifiedName) _) ->
                 Expression.FunctionOrValue qualifiedName.moduleName qualifiedName.name
 
-            PartiallyApplied _ args _ (Just qualifiedName) _ ->
+            PartiallyApplied (PartiallyAppliedFunction _ args _ (Just qualifiedName) _) ->
                 (Node.empty
                     (Expression.FunctionOrValue
                         qualifiedName.moduleName
@@ -111,13 +111,13 @@ toExpression value =
                 )
                     |> Expression.Application
 
-            PartiallyApplied _ [] patterns Nothing implementation ->
+            PartiallyApplied (PartiallyAppliedFunction _ [] patterns Nothing implementation) ->
                 Expression.LambdaExpression
                     { args = patterns
                     , expression = implementation
                     }
 
-            PartiallyApplied _ args patterns Nothing implementation ->
+            PartiallyApplied (PartiallyAppliedFunction _ args patterns Nothing implementation) ->
                 (Node.empty
                     (Expression.LambdaExpression
                         { args = patterns
@@ -235,7 +235,7 @@ toString value =
         JsArray arr ->
             "[" ++ String.join "," (List.map toString (Array.toList arr)) ++ "]"
 
-        PartiallyApplied _ _ _ _ _ ->
+        PartiallyApplied (PartiallyAppliedFunction _ _ _ _ _) ->
             "<function>"
 
 

@@ -10,7 +10,7 @@ import Environment
 import Eval.Types as Types
 import EvalResult
 import FastDict as Dict exposing (Dict)
-import InterpreterTypes exposing (CallTree(..), Env, EnvValues, Eval, EvalErrorData, EvalResult, PartialEval, PartialResult, Value(..))
+import InterpreterTypes exposing (CallTree(..), Env, EnvValues, Eval, EvalErrorData, EvalResult, PartialEval, PartialResult, PartiallyAppliedFunction(..), Value(..))
 import Kernel
 import List.Extra
 import Recursion
@@ -101,7 +101,7 @@ evalExpression initExpression initCfg initEnv =
                             evalCase caseExpr cfg env
 
                         Expression.LambdaExpression lambda ->
-                            Types.succeedPartial <| PartiallyApplied env [] lambda.args Nothing lambda.expression
+                            Types.succeedPartial <| PartiallyApplied (PartiallyAppliedFunction env [] lambda.args Nothing lambda.expression)
 
                         Expression.RecordExpr fields ->
                             evalRecord fields cfg env
@@ -253,7 +253,7 @@ evalApplication first rest cfg env =
                         in
                         if oldArgsLength + restLength < patternsLength then
                             -- Still not enough
-                            Types.succeedPartial <| PartiallyApplied localEnv args patterns maybeQualifiedName implementation
+                            Types.succeedPartial <| PartiallyApplied (PartiallyAppliedFunction localEnv args patterns maybeQualifiedName implementation)
 
                         else
                             -- Just right, we special case this for TCO
@@ -267,7 +267,7 @@ evalApplication first rest cfg env =
                     Types.recurseMapThen ( rest, cfg, env )
                         (\values -> Types.succeedPartial <| Custom moduleName name (customArgs ++ values))
 
-                PartiallyApplied localEnv oldArgs patterns maybeQualifiedName implementation ->
+                PartiallyApplied (PartiallyAppliedFunction localEnv oldArgs patterns maybeQualifiedName implementation) ->
                     inner localEnv oldArgs patterns maybeQualifiedName implementation
 
                 other ->
@@ -384,11 +384,13 @@ evalFunctionOrValue moduleName name cfg env =
 
                 else
                     PartiallyApplied
-                        (Environment.call resolvedModule name env)
-                        []
-                        function.arguments
-                        (Just { moduleName = resolvedModule, name = name })
-                        function.expression
+                        (PartiallyAppliedFunction
+                            (Environment.call resolvedModule name env)
+                            []
+                            function.arguments
+                            (Just { moduleName = resolvedModule, name = name })
+                            function.expression
+                        )
                         |> Types.succeedPartial
 
             Nothing ->
@@ -511,16 +513,18 @@ evalNonVariant moduleName name cfg env =
 
                         Just function ->
                             PartiallyApplied
-                                (Environment.call moduleName name env)
-                                []
-                                function.arguments
-                                (Just { moduleName = moduleName, name = name })
-                                function.expression
+                                (PartiallyAppliedFunction
+                                    (Environment.call moduleName name env)
+                                    []
+                                    function.arguments
+                                    (Just { moduleName = moduleName, name = name })
+                                    function.expression
+                                )
                                 |> Types.succeedPartial
 
         _ ->
             case ( moduleName, Dict.get name env.values ) of
-                ( [], Just (PartiallyApplied localEnv [] [] maybeName implementation) ) ->
+                ( [], Just (PartiallyApplied (PartiallyAppliedFunction localEnv [] [] maybeName implementation)) ) ->
                     call maybeName implementation cfg localEnv
 
                 ( [], Just value ) ->
@@ -601,11 +605,13 @@ evalNonVariant moduleName name cfg env =
 
                             else
                                 PartiallyApplied
-                                    (Environment.call resolvedModule name targetEnv)
-                                    []
-                                    function.arguments
-                                    (Just qualifiedNameRef)
-                                    function.expression
+                                    (PartiallyAppliedFunction
+                                        (Environment.call resolvedModule name targetEnv)
+                                        []
+                                        function.arguments
+                                        (Just qualifiedNameRef)
+                                        function.expression
+                                    )
                                     |> Types.succeedPartial
 
                         Nothing ->
@@ -675,7 +681,7 @@ evalFunction oldArgs patterns functionName implementation cfg localEnv =
     in
     if oldArgsLength < patternsLength then
         -- Still not enough
-        EvalResult.succeed <| PartiallyApplied localEnv oldArgs patterns functionName implementation
+        EvalResult.succeed <| PartiallyApplied (PartiallyAppliedFunction localEnv oldArgs patterns functionName implementation)
 
     else
         -- Just right, we special case this for TCO
@@ -756,11 +762,14 @@ evalKernelFunction moduleName name cfg env =
                             Recursion.base <| EvalResult.fromResult result
 
                     else
-                        PartiallyApplied (Environment.empty moduleName)
-                            []
-                            (List.repeat argCount (Node.empty AllPattern))
-                            (Just { moduleName = moduleName, name = name })
-                            (Node.empty <| Expression.FunctionOrValue moduleName name)
+                        PartiallyApplied
+                            (PartiallyAppliedFunction
+                                (Environment.empty moduleName)
+                                []
+                                (List.repeat argCount (Node.empty AllPattern))
+                                (Just { moduleName = moduleName, name = name })
+                                (Node.empty <| Expression.FunctionOrValue moduleName name)
+                            )
                             |> Types.succeedPartial
 
 
@@ -1033,14 +1042,16 @@ evalRecordAccess recordExpr (Node _ field) cfg env =
 evalRecordAccessFunction : String -> Value
 evalRecordAccessFunction field =
     PartiallyApplied
-        (Environment.empty [])
-        []
-        [ Node.empty (VarPattern "$r") ]
-        Nothing
-        (Node.empty <|
-            Expression.RecordAccess
-                (Node.empty <| Expression.FunctionOrValue [] "$r")
-                (Node.empty <| String.dropLeft 1 field)
+        (PartiallyAppliedFunction
+            (Environment.empty [])
+            []
+            [ Node.empty (VarPattern "$r") ]
+            Nothing
+            (Node.empty <|
+                Expression.RecordAccess
+                    (Node.empty <| Expression.FunctionOrValue [] "$r")
+                    (Node.empty <| String.dropLeft 1 field)
+            )
         )
 
 
@@ -1087,16 +1098,18 @@ evalOperator opName _ env =
 
         Just kernelFunction ->
             PartiallyApplied
-                (Environment.call kernelFunction.moduleName opName env)
-                []
-                [ Node.empty <| VarPattern "$l", Node.empty <| VarPattern "$r" ]
-                Nothing
-                (Node.empty <|
-                    Expression.Application
-                        [ Node.empty <| Expression.FunctionOrValue kernelFunction.moduleName kernelFunction.name
-                        , Node.empty <| Expression.FunctionOrValue [] "$l"
-                        , Node.empty <| Expression.FunctionOrValue [] "$r"
-                        ]
+                (PartiallyAppliedFunction
+                    (Environment.call kernelFunction.moduleName opName env)
+                    []
+                    [ Node.empty <| VarPattern "$l", Node.empty <| VarPattern "$r" ]
+                    Nothing
+                    (Node.empty <|
+                        Expression.Application
+                            [ Node.empty <| Expression.FunctionOrValue kernelFunction.moduleName kernelFunction.name
+                            , Node.empty <| Expression.FunctionOrValue [] "$l"
+                            , Node.empty <| Expression.FunctionOrValue [] "$r"
+                            ]
+                    )
                 )
                 |> Types.succeedPartial
 

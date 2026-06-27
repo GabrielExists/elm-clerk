@@ -8,7 +8,7 @@ import Elm.Syntax.Node exposing (Node)
 import FastDict as Dict exposing (Dict)
 import Html exposing (Html)
 import Http
-import InterpreterTypes exposing (Value)
+import InterpreterTypes exposing (PartiallyAppliedFunction, Value)
 import Lamdera exposing (ClientId)
 import Parser exposing (DeadEnd)
 import Url exposing (Url)
@@ -21,17 +21,14 @@ type alias FrontendModel =
     , checksum : Maybe String
     , error : String
     , fileList : List FileName
-    , sections : List ( Code, List Section )
+    , sections : List Section
     , inputInteractives : Interactives
     , evalInteractives : Interactives
-    , functions : Dict String Function
+    , functions : Dict String PartiallyAppliedFunction
     , viewers : List Viewer
-    , outputs : Dict String Value
+    , hostViewers : List HostViewer
+    , outputs : Dict String Output
     }
-
-
-type alias Function =
-    Int
 
 
 type alias BackendModel =
@@ -43,12 +40,24 @@ type alias BackendModel =
     }
 
 
+type alias Function =
+    PartiallyAppliedFunction
+
+
+type alias Output =
+    Result OutputError OutputValue
+
+
 type alias ParsedSection =
     Result (List DeadEnd) (List Cell)
 
 
 type alias Viewer =
     Value -> Result OutputError (Maybe (Html.Html FrontendMsg))
+
+
+type alias HostViewer =
+    Value -> Maybe (Html.Html FrontendMsg)
 
 
 type Cell
@@ -172,5 +181,5 @@ type Section
     = MarkdownSection Markdown
     | CodeSection Code
     | EvaluatedSection Code (Result OutputError OutputValue)
-    | InteractiveSection Code (List (Element FrontendMsg)) (Result OutputError OutputValue)
+    | InteractiveSection Code FunctionName
     | ErrorSection (List OutputError)

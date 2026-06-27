@@ -1,4 +1,4 @@
-module InterpreterTypes exposing (CallTree(..), Config, Env, EnvValues, Error(..), Eval, EvalErrorData, EvalErrorKind(..), EvalResult, ImportedNames, PartialEval, PartialResult, Value(..), emptyImports)
+module InterpreterTypes exposing (CallTree(..), Config, Env, EnvValues, Error(..), Eval, EvalErrorData, EvalErrorKind(..), EvalResult, ImportedNames, PartialEval, PartialResult, PartiallyAppliedFunction(..), Value(..), emptyImports)
 
 import Array exposing (Array)
 import Elm.Syntax.Expression exposing (Expression, FunctionImplementation)
@@ -63,9 +63,13 @@ type Value
     | Triple Value Value Value
     | Record (Dict String Value)
     | Custom ModuleName String (List Value)
-    | PartiallyApplied Env (List Value) (List (Node Pattern)) (Maybe QualifiedNameRef) (Node Expression)
+    | PartiallyApplied PartiallyAppliedFunction
     | JsArray (Array Value)
     | List (List Value)
+
+
+type PartiallyAppliedFunction
+    = PartiallyAppliedFunction Env (List Value) (List (Node Pattern)) (Maybe QualifiedNameRef) (Node Expression)
 
 
 type alias Env =

@@ -5,7 +5,7 @@ import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Pattern exposing (Pattern(..), QualifiedNameRef)
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
 import Http
-import InterpreterTypes exposing (Error(..), EvalErrorData, Value(..))
+import InterpreterTypes exposing (Error(..), EvalErrorData, PartiallyAppliedFunction(..), Value(..))
 import Parser exposing (DeadEnd)
 import Value
 
@@ -85,7 +85,7 @@ httpErrorToString error =
 functionDeclarationToString : Value -> String
 functionDeclarationToString value =
     case value of
-        PartiallyApplied _ values patterns maybeName (Node _ expression) ->
+        PartiallyApplied (PartiallyAppliedFunction _ values patterns maybeName (Node _ expression)) ->
             "  Already applied:"
                 :: (values
                         |> List.map Value.toString

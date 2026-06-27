@@ -18,7 +18,7 @@ import Elm.Syntax.Pattern exposing (Pattern(..), QualifiedNameRef)
 import Environment
 import EvalResult
 import FastDict as Dict exposing (Dict)
-import InterpreterTypes exposing (Eval, EvalErrorData, EvalResult, Value(..))
+import InterpreterTypes exposing (Eval, EvalErrorData, EvalResult, PartiallyAppliedFunction(..), Value(..))
 import Kernel.Debug
 import Kernel.Html exposing (Attr(..), Html(..))
 import Kernel.JsArray
@@ -517,7 +517,7 @@ encodedValue =
                 Custom moduleName name values ->
                     Custom [] "Custom" [ (list string).toValue moduleName, string.toValue name, (list encodedValue).toValue values ]
 
-                PartiallyApplied env values nodes maybeQualifiedNameRef node ->
+                PartiallyApplied (PartiallyAppliedFunction env values nodes maybeQualifiedNameRef node) ->
                     Custom [] "PartiallyApplied" []
 
                 JsArray array ->
@@ -543,7 +543,7 @@ function evalFunctionWith inSelector _ outSelector =
         fromValue : Value -> Maybe (from -> Eval to)
         fromValue value =
             case value of
-                PartiallyApplied localEnv oldArgs patterns maybeName implementation ->
+                PartiallyApplied (PartiallyAppliedFunction localEnv oldArgs patterns maybeName implementation) ->
                     Just
                         (\arg cfg _ ->
                             evalFunctionWith (oldArgs ++ [ inSelector.toValue arg ]) patterns maybeName implementation cfg localEnv
@@ -973,15 +973,17 @@ partiallyApply moduleName args implementation =
     EvalResult.fromResult <|
         Ok <|
             PartiallyApplied
-                (Environment.empty moduleName)
-                args
-                implementation.arguments
-                (Just
-                    { moduleName = moduleName
-                    , name = Node.value implementation.name
-                    }
+                (PartiallyAppliedFunction
+                    (Environment.empty moduleName)
+                    args
+                    implementation.arguments
+                    (Just
+                        { moduleName = moduleName
+                        , name = Node.value implementation.name
+                        }
+                    )
+                    implementation.expression
                 )
-                implementation.expression
 
 
 twoNumbers :

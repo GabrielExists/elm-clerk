@@ -30,7 +30,7 @@ import Html
 import Html.Attributes
 import Http
 import Interactives
-import InterpreterTypes exposing (Env, Error(..), Eval, Value(..))
+import InterpreterTypes exposing (Env, Error(..), Eval, PartiallyAppliedFunction(..), Value(..))
 import Json.Decode
 import Kernel
 import Kernel.Html
@@ -45,7 +45,7 @@ import Regex
 import Result.Extra
 import Task
 import ToString exposing (annotationToString, errorToString, evalErrorDataToString, httpErrorToString, patternToString)
-import Types exposing (BackendMsg(..), Cell(..), Code(..), FileName(..), FrontendModel, FrontendMsg(..), FullCode(..), FunctionName(..), Interactives(..), Markdown(..), OutputError(..), OutputValue(..), ParameterName(..), ParsedSection, RawInteractiveValue(..), Section(..), ToBackend(..), ToFrontend(..), TypeName(..), Viewer)
+import Types exposing (BackendMsg(..), Cell(..), Code(..), FileName(..), FrontendModel, FrontendMsg(..), FullCode(..), FunctionName(..), HostViewer, Interactives(..), Markdown(..), Output, OutputError(..), OutputValue(..), ParameterName(..), ParsedSection, RawInteractiveValue(..), Section(..), ToBackend(..), ToFrontend(..), TypeName(..), Viewer)
 import UI.Source as Source
 import Url
 import Value
@@ -85,6 +85,7 @@ init _ key =
       , evalInteractives = Interactives.empty
       , functions = Dict.empty
       , viewers = []
+      , hostViewers = []
       , outputs = Dict.empty
       }
     , Cmd.batch
@@ -123,13 +124,23 @@ updateFullSource model =
 generateInteractive : FullCode -> Model -> Model
 generateInteractive source model =
     let
-        evaluated =
-            evaluateSections model source
+        maybeFile : Result Error File
+        maybeFile =
+            makeFile source
+
+        maybeEnv : Result Error Env
+        maybeEnv =
+            maybeFile
+                |> Result.andThen Eval.Module.buildInitialEnv
+
+        ( viewers, sections, functions ) =
+            evaluateSections model source maybeEnv
     in
     { model
-        | functions = Dict.empty
-        , viewers = []
-        , outputs = Dict.empty
+        | functions = functions
+        , viewers = viewers
+        , hostViewers = makeHostViewers maybeEnv
+        , sections = sections
     }
 
 
@@ -196,8 +207,17 @@ update msg model =
 
         InteractiveUpdated names value ->
             let
+                newInteractives : Interactives
                 newInteractives =
                     Interactives.insert names value model.inputInteractives
+
+                --function =
+                --    Dict.get (Tuple.first names) model.functions
+                --
+                --newOutput : Interactives -> PartiallyAppliedFunction -> Declaration -> Output
+                --newOutput =
+                --    applyPartiallyApplied
+                --        newInteractives
             in
             ( { model | inputInteractives = newInteractives }
             , Cmd.batch
@@ -288,6 +308,7 @@ requestPage (FileName fileName) =
 
 
 
+--updateOutput =
 -- PARSING TEXT INPUT
 
 
@@ -365,22 +386,9 @@ getHostText fullSource =
 -- SECTIONS EVALUATION
 
 
-type alias HostViewer =
-    Value -> Maybe (Html.Html FrontendMsg)
-
-
-evaluateSections : Model -> FullCode -> ( List Viewer, List HostViewer, List Section )
-evaluateSections model source =
+evaluateSections : Model -> FullCode -> Result Error Env -> ( List Viewer, List Section, Dict String Types.Function )
+evaluateSections model source maybeEnv =
     let
-        maybeFile : Result Error File
-        maybeFile =
-            makeFile source
-
-        maybeEnv : Result Error Env
-        maybeEnv =
-            maybeFile
-                |> Result.andThen Eval.Module.buildInitialEnv
-
         viewerSelector : Kernel.InSelector (List (Value -> InterpreterTypes.Config -> Env -> InterpreterTypes.EvalResult (Maybe Kernel.Html.Html))) {}
         viewerSelector =
             Kernel.listIn (Kernel.function Eval.Expression.evalFunction Kernel.anything Kernel.to (Kernel.maybe Kernel.html))
@@ -415,20 +423,9 @@ evaluateSections model source =
                 |> Maybe.withDefault []
                 |> List.map transformValue
 
-        moduleName : String
-        moduleName =
-            String.join "" (Result.withDefault [] (Result.map .currentModule maybeEnv))
-
-        hostViewers : List HostViewer
-        hostViewers =
-            Dict.fromList Viewers.viewers
-                |> Dict.get moduleName
-                |> Maybe.withDefault []
-
-        evaluateSection : ( Code, Result error (List Cell) ) -> Section
+        evaluateSection : ( Code, ParsedSection ) -> Section
         evaluateSection sectionResult =
-            sectionResult
-                |> sectionFromParsed model.evalInteractives model.inputInteractives maybeEnv
+            sectionFromParsed model.evalInteractives model.inputInteractives maybeEnv sectionResult
 
         viewersError : Maybe OutputError
         viewersError =
@@ -446,16 +443,36 @@ evaluateSections model source =
                     else
                         Just (OutputError (Debug.log "error" error))
 
+        parsedSections : List ( Code, ParsedSection )
+        parsedSections =
+            parseSections source
+
         evaluatedSections : List Section
         evaluatedSections =
-            parseSections source |> List.map evaluateSection
+            parsedSections |> List.map evaluateSection
+
+        functions : Dict String Types.Function
+        functions =
+            Dict.empty
     in
     case viewersError of
         Just error ->
-            ( viewers, hostViewers, ErrorSection [ OutputError "\"viewers\" failed to evaluate:", error ] :: evaluatedSections )
+            ( viewers, ErrorSection [ OutputError "\"viewers\" failed to evaluate:", error ] :: evaluatedSections, functions )
 
         Nothing ->
-            ( viewers, hostViewers, evaluatedSections )
+            ( viewers, evaluatedSections, functions )
+
+
+makeHostViewers : Result x Env -> List (Value -> Maybe (Html.Html never))
+makeHostViewers maybeEnv =
+    let
+        moduleName : String
+        moduleName =
+            String.join "" (Result.withDefault [] (Result.map .currentModule maybeEnv))
+    in
+    Dict.fromList Viewers.viewers
+        |> Dict.get moduleName
+        |> Maybe.withDefault []
 
 
 makeFile : FullCode -> Result Error File
@@ -511,8 +528,9 @@ sectionFromParsed evalInteractives inputInteractives maybeEnv ( source, parsedSe
                         Err error ->
                             EvaluatedSection source (Err error)
 
-                        Ok ((PartiallyApplied _ _ _ _ _) as functionDeclaration) ->
-                            handlePartiallyApplied evalInteractives inputInteractives source functionDeclaration declaration
+                        Ok (PartiallyApplied functionDeclaration) ->
+                            --applyPartiallyApplied evalInteractives inputInteractives source functionDeclaration declaration
+                            InteractiveSection source expressionName
 
                         Ok value ->
                             EvaluatedSection source (value |> OutputValue |> Ok)
@@ -547,130 +565,254 @@ sectionFromParsed evalInteractives inputInteractives maybeEnv ( source, parsedSe
 
 
 -- EVALUATION
+--applyPartiallyApplied : Interactives -> Interactives -> Code -> PartiallyAppliedFunction -> Declaration -> Section
+--applyPartiallyApplied evalInteractives inputInteractives source partiallyApplied declaration =
+--    let
+--        (PartiallyAppliedFunction baseEnv alreadyApplied patterns _ expression) =
+--            partiallyApplied
+--
+--        maybePairs : Result OutputError (List ( ParameterName, TypeName ))
+--        maybePairs =
+--            parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
+--
+--        maybeValuePairs : Result OutputError (List ( ParameterName, Value ))
+--        maybeValuePairs =
+--            parseValuesTogether (patterns |> List.map Node.value) alreadyApplied
+--
+--        functionName : FunctionName
+--        functionName =
+--            extractNameFromDeclaration declaration |> FunctionName
+--
+--        insertIntoEnvFromValue : ( ParameterName, Value ) -> Dict String Value -> Dict String Value
+--        insertIntoEnvFromValue ( ParameterName binding, value ) localValues =
+--            Dict.insert binding value localValues
+--
+--        insertIntoEnvFromType : ( ParameterName, TypeName ) -> Dict String Value -> Result OutputError (Dict String Value)
+--        insertIntoEnvFromType ( ParameterName binding, TypeName typeName ) localValues =
+--            let
+--                maybeTypeNode : Maybe InteractiveElement
+--                maybeTypeNode =
+--                    Dict.get typeName typeNodeMap
+--
+--                maybeRawValue : Maybe RawInteractiveValue
+--                maybeRawValue =
+--                    Interactives.get ( functionName, ParameterName binding ) evalInteractives
+--
+--                typeNodeToValue : InteractiveElement -> RawInteractiveValue -> Result OutputError Value
+--                typeNodeToValue typeNode rawValue =
+--                    typeNode.conversion rawValue
+--
+--                maybeValue : Maybe (Result OutputError Value)
+--                maybeValue =
+--                    Maybe.map2 typeNodeToValue maybeTypeNode maybeRawValue
+--            in
+--            case maybeValue of
+--                Just (Ok value) ->
+--                    Dict.insert binding value localValues |> Ok
+--
+--                _ ->
+--                    ("Missing \"" ++ binding ++ "\"") |> OutputError |> Err
+--
+--        updateEnvFromValues : Env -> Env
+--        updateEnvFromValues env =
+--            case maybeValuePairs of
+--                Err _ ->
+--                    env
+--
+--                Ok pairs ->
+--                    { env
+--                        | values =
+--                            List.foldl
+--                                insertIntoEnvFromValue
+--                                env.values
+--                                pairs
+--                    }
+--
+--        updateEnvFromType : Env -> Result OutputError Env
+--        updateEnvFromType env =
+--            case maybePairs of
+--                Err _ ->
+--                    Ok env
+--
+--                Ok pairs ->
+--                    case
+--                        Result.Extra.foldlWhileOk
+--                            insertIntoEnvFromType
+--                            env.values
+--                            pairs
+--                    of
+--                        Ok newValues ->
+--                            { env
+--                                | values = newValues
+--                            }
+--                                |> Ok
+--
+--                        Err err ->
+--                            Err err
+--
+--        functionOutput : Result OutputError Value
+--        functionOutput =
+--            (baseEnv |> updateEnvFromValues |> updateEnvFromType)
+--                |> Result.andThen (\env -> evaluate (Ok env) expression)
+--
+--        interactiveElements : Result OutputError (List (Element FrontendMsg))
+--        interactiveElements =
+--            case ( maybePairs, maybeValuePairs ) of
+--                ( Ok pairs, Ok _ ) ->
+--                    pairs
+--                        |> Result.Extra.combineMap (viewInteractive inputInteractives functionName)
+--                        |> Result.Extra.extract (\error -> viewOutputError error |> List.singleton)
+--                        |> Ok
+--
+--                ( Err error, _ ) ->
+--                    error
+--                        |> Err
+--
+--                ( _, Err error ) ->
+--                    error
+--                        |> Err
+--    in
+--    case interactiveElements of
+--        Err output ->
+--            EvaluatedSection source (Err output)
+--
+--        Ok elements ->
+--            case functionOutput of
+--                Ok functionOutputOk ->
+--                    InteractiveSection source
+--                        elements
+--                        (functionOutputOk |> OutputValue |> Ok)
+--
+--                Err functionOutputError ->
+--                    InteractiveSection source elements (Err functionOutputError)
 
 
-handlePartiallyApplied : Interactives -> Interactives -> Code -> Value -> Declaration -> Section
-handlePartiallyApplied evalInteractives inputInteractives source partiallyApplied declaration =
-    case partiallyApplied of
-        PartiallyApplied baseEnv alreadyApplied patterns _ expression ->
+applyPartiallyApplied : Interactives -> PartiallyAppliedFunction -> Declaration -> Output
+applyPartiallyApplied evalInteractives partiallyApplied declaration =
+    let
+        (PartiallyAppliedFunction baseEnv alreadyApplied patterns _ expression) =
+            partiallyApplied
+
+        maybePairs : Result OutputError (List ( ParameterName, TypeName ))
+        maybePairs =
+            parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
+
+        maybeValuePairs : Result OutputError (List ( ParameterName, Value ))
+        maybeValuePairs =
+            parseValuesTogether (patterns |> List.map Node.value) alreadyApplied
+
+        functionName : FunctionName
+        functionName =
+            extractNameFromDeclaration declaration |> FunctionName
+
+        insertIntoEnvFromValue : ( ParameterName, Value ) -> Dict String Value -> Dict String Value
+        insertIntoEnvFromValue ( ParameterName binding, value ) localValues =
+            Dict.insert binding value localValues
+
+        insertIntoEnvFromType : ( ParameterName, TypeName ) -> Dict String Value -> Result OutputError (Dict String Value)
+        insertIntoEnvFromType ( ParameterName binding, TypeName typeName ) localValues =
             let
-                maybePairs : Result OutputError (List ( ParameterName, TypeName ))
-                maybePairs =
-                    parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
+                maybeTypeNode : Maybe InteractiveElement
+                maybeTypeNode =
+                    Dict.get typeName typeNodeMap
 
-                maybeValuePairs : Result OutputError (List ( ParameterName, Value ))
-                maybeValuePairs =
-                    parseValuesTogether (patterns |> List.map Node.value) alreadyApplied
+                maybeRawValue : Maybe RawInteractiveValue
+                maybeRawValue =
+                    Interactives.get ( functionName, ParameterName binding ) evalInteractives
 
-                functionName : FunctionName
-                functionName =
-                    extractNameFromDeclaration declaration |> FunctionName
+                typeNodeToValue : InteractiveElement -> RawInteractiveValue -> Result OutputError Value
+                typeNodeToValue typeNode rawValue =
+                    typeNode.conversion rawValue
 
-                insertIntoEnvFromValue : ( ParameterName, Value ) -> Dict String Value -> Dict String Value
-                insertIntoEnvFromValue ( ParameterName binding, value ) localValues =
-                    Dict.insert binding value localValues
+                maybeValue : Maybe (Result OutputError Value)
+                maybeValue =
+                    Maybe.map2 typeNodeToValue maybeTypeNode maybeRawValue
+            in
+            case maybeValue of
+                Just (Ok value) ->
+                    Dict.insert binding value localValues |> Ok
 
-                insertIntoEnvFromType : ( ParameterName, TypeName ) -> Dict String Value -> Result OutputError (Dict String Value)
-                insertIntoEnvFromType ( ParameterName binding, TypeName typeName ) localValues =
-                    let
-                        maybeTypeNode : Maybe InteractiveElement
-                        maybeTypeNode =
-                            Dict.get typeName typeNodeMap
+                _ ->
+                    ("Missing \"" ++ binding ++ "\"") |> OutputError |> Err
 
-                        maybeRawValue : Maybe RawInteractiveValue
-                        maybeRawValue =
-                            Interactives.get ( functionName, ParameterName binding ) evalInteractives
+        updateEnvFromValues : Env -> Env
+        updateEnvFromValues env =
+            case maybeValuePairs of
+                Err _ ->
+                    env
 
-                        typeNodeToValue : InteractiveElement -> RawInteractiveValue -> Result OutputError Value
-                        typeNodeToValue typeNode rawValue =
-                            typeNode.conversion rawValue
+                Ok pairs ->
+                    { env
+                        | values =
+                            List.foldl
+                                insertIntoEnvFromValue
+                                env.values
+                                pairs
+                    }
 
-                        maybeValue : Maybe (Result OutputError Value)
-                        maybeValue =
-                            Maybe.map2 typeNodeToValue maybeTypeNode maybeRawValue
-                    in
-                    case maybeValue of
-                        Just (Ok value) ->
-                            Dict.insert binding value localValues |> Ok
+        updateEnvFromType : Env -> Result OutputError Env
+        updateEnvFromType env =
+            case maybePairs of
+                Err _ ->
+                    Ok env
 
-                        _ ->
-                            ("Missing \"" ++ binding ++ "\"") |> OutputError |> Err
-
-                updateEnvFromValues : Env -> Env
-                updateEnvFromValues env =
-                    case maybeValuePairs of
-                        Err _ ->
-                            env
-
-                        Ok pairs ->
-                            { env
-                                | values =
-                                    List.foldl
-                                        insertIntoEnvFromValue
-                                        env.values
-                                        pairs
-                            }
-
-                updateEnvFromType : Env -> Result OutputError Env
-                updateEnvFromType env =
-                    case maybePairs of
-                        Err _ ->
-                            Ok env
-
-                        Ok pairs ->
-                            case
-                                Result.Extra.foldlWhileOk
-                                    insertIntoEnvFromType
-                                    env.values
-                                    pairs
-                            of
-                                Ok newValues ->
-                                    { env
-                                        | values = newValues
-                                    }
-                                        |> Ok
-
-                                Err err ->
-                                    Err err
-
-                functionOutput : Result OutputError Value
-                functionOutput =
-                    (baseEnv |> updateEnvFromValues |> updateEnvFromType)
-                        |> Result.andThen (\env -> evaluate (Ok env) expression)
-
-                interactiveElements : Result OutputError (List (Element FrontendMsg))
-                interactiveElements =
-                    case ( maybePairs, maybeValuePairs ) of
-                        ( Ok pairs, Ok _ ) ->
+                Ok pairs ->
+                    case
+                        Result.Extra.foldlWhileOk
+                            insertIntoEnvFromType
+                            env.values
                             pairs
-                                |> Result.Extra.combineMap (viewInteractive inputInteractives functionName)
-                                |> Result.Extra.extract (\error -> viewOutputError error |> List.singleton)
+                    of
+                        Ok newValues ->
+                            { env
+                                | values = newValues
+                            }
                                 |> Ok
 
-                        ( Err error, _ ) ->
-                            error
-                                |> Err
+                        Err err ->
+                            Err err
 
-                        ( _, Err error ) ->
-                            error
-                                |> Err
-            in
-            case interactiveElements of
-                Err output ->
-                    EvaluatedSection source (Err output)
+        functionOutput : Result OutputError Value
+        functionOutput =
+            (baseEnv |> updateEnvFromValues |> updateEnvFromType)
+                |> Result.andThen (\env -> evaluate (Ok env) expression)
 
-                Ok elements ->
-                    case functionOutput of
-                        Ok functionOutputOk ->
-                            InteractiveSection source
-                                elements
-                                (functionOutputOk |> OutputValue |> Ok)
+        --interactiveElements : Result OutputError (List (Element FrontendMsg))
+        --interactiveElements =
+        --    case ( maybePairs, maybeValuePairs ) of
+        --        ( Ok pairs, Ok _ ) ->
+        --            pairs
+        --                |> Result.Extra.combineMap (viewInteractive inputInteractives functionName)
+        --                |> Result.Extra.extract (\error -> viewOutputError error |> List.singleton)
+        --                |> Ok
+        --
+        --        ( Err error, _ ) ->
+        --            error
+        --                |> Err
+        --
+        --        ( _, Err error ) ->
+        --            error
+        --                |> Err
+    in
+    Result.map OutputValue functionOutput
 
-                        Err functionOutputError ->
-                            InteractiveSection source elements (Err functionOutputError)
 
-        _ ->
-            ErrorSection [ OutputError "Called handlePartiallyApplied with a declaration that was not a function" ]
+
+--type alias Output =
+--    ( List (Element FrontendMsg), Result OutputError OutputValue )
+--    case interactiveElements of
+--        Err output ->
+--            EvaluatedSection source (Err output)
+--
+--        Ok elements ->
+--            case functionOutput of
+--                Ok functionOutputOk ->
+--                    InteractiveSection source
+--                        elements
+--                        (functionOutputOk |> OutputValue |> Ok)
+--
+--                Err functionOutputError ->
+--                    InteractiveSection source elements (Err functionOutputError)
 
 
 evaluateName : Result Error Env -> FunctionName -> Result OutputError Value
@@ -1004,7 +1146,8 @@ view model =
                     ++ (model.fileList |> List.map viewListItem)
                     ++ (case ( model.source, model.currentFileName, model.error ) of
                             ( Just source, _, _ ) ->
-                                evaluateSections model source |> viewSections
+                                --evaluateSections model source |> viewSections
+                                [ Element.text "Source" ]
 
                             ( _, Nothing, _ ) ->
                                 [ Element.el
@@ -1065,9 +1208,9 @@ defaultPadding =
     { top = 0, right = 0, bottom = 0, left = 0 }
 
 
-viewSections : ( List Viewer, List HostViewer, List Section ) -> List (Element FrontendMsg)
-viewSections ( viewers, hostViewers, sections ) =
-    sections |> List.map (Element.Lazy.lazy (viewSection viewers hostViewers))
+viewSections : List Viewer -> List HostViewer -> Dict String Output -> List Section -> List (Element FrontendMsg)
+viewSections viewers hostViewers outputs sections =
+    sections |> List.map (Element.Lazy.lazy (viewSection viewers hostViewers outputs))
 
 
 viewChart : Element msg
@@ -1102,8 +1245,8 @@ viewCode (Code code) =
             }
 
 
-viewSection : List Viewer -> List HostViewer -> Section -> Element FrontendMsg
-viewSection viewers hostViewers section =
+viewSection : List Viewer -> List HostViewer -> Dict String Output -> Section -> Element FrontendMsg
+viewSection viewers hostViewers outputs section =
     let
         applyHostViewer : Value -> Maybe (Html.Html FrontendMsg)
         applyHostViewer value =
@@ -1184,21 +1327,27 @@ viewSection viewers hostViewers section =
                         viewOutputError value
                 ]
 
-            InteractiveSection code elements output ->
-                [ viewCode code
-                , Element.row
-                    [ width fill
-                    , Element.Background.color (Element.rgb255 240 240 240)
-                    , Element.paddingXY (graySidePadding - 9) 0
-                    ]
-                    elements
-                , case transform output of
-                    Ok value ->
-                        viewOutputValue value
+            InteractiveSection code (FunctionName functionName) ->
+                [ viewCode code ]
+                    ++ (case Dict.get functionName outputs of
+                            Nothing ->
+                                [ viewOutputError (OutputError "No function with this name found!") ]
 
-                    Err value ->
-                        viewOutputError value
-                ]
+                            Just output ->
+                                --[ Element.row
+                                --    [ width fill
+                                --    , Element.Background.color (Element.rgb255 240 240 240)
+                                --    , Element.paddingXY (graySidePadding - 9) 0
+                                --    ]
+                                --    elements
+                                [ case transform output of
+                                    Ok value ->
+                                        viewOutputValue value
+
+                                    Err value ->
+                                        viewOutputError value
+                                ]
+                       )
 
             ErrorSection error ->
                 List.map viewOutputError error

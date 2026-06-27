@@ -4,7 +4,7 @@ import Array
 import Elm.Syntax.ModuleName exposing (ModuleName)
 import EvalResult
 import FastDict as Dict exposing (Dict)
-import InterpreterTypes exposing (Env, Eval, EvalErrorData, Value(..))
+import InterpreterTypes exposing (Env, Eval, EvalErrorData, PartiallyAppliedFunction(..), Value(..))
 import Value exposing (typeError)
 
 
@@ -174,10 +174,10 @@ innerCompare l r env =
         ( Unit, _ ) ->
             uncomparable ()
 
-        ( PartiallyApplied _ _ _ _ _, PartiallyApplied _ _ _ _ _ ) ->
+        ( PartiallyApplied _, PartiallyApplied _ ) ->
             Err <| typeError env "Cannot compare functions"
 
-        ( PartiallyApplied _ _ _ _ _, _ ) ->
+        ( PartiallyApplied _, _ ) ->
             uncomparable ()
 
 
