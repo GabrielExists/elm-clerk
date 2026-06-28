@@ -28,6 +28,7 @@ type alias FrontendModel =
     , viewers : List Viewer
     , hostViewers : List HostViewer
     , outputs : IdDict FunctionName Output
+    , runOnHost : Bool
     }
 
 
@@ -158,6 +159,7 @@ type FrontendMsg
     | InteractiveUpdated ( FunctionName, ParameterName ) RawInteractiveValue
     | CheckGenerateOutputs
     | ReloadFunction FunctionName Int
+    | RunOnHostChanged Bool
     | Poll
     | NewScroll Float
     | NoOp

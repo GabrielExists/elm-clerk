@@ -8,6 +8,7 @@ import Chart.Attributes as CA
 import Common exposing (notifyIn)
 import Element exposing (Attribute, Element, clipX, el, fill, height, maximum, paddingEach, paragraph, scrollbarX, scrollbarY, shrink, text, width)
 import Element.Background
+import Element.Border
 import Element.Font as Font
 import Element.Input
 import Element.Lazy
@@ -89,6 +90,7 @@ init _ key =
       , hostViewers = []
       , outputs = IdDict.empty (\(FunctionName functionName) -> functionName)
       , reloadRequests = IdDict.empty (\(FunctionName functionName) -> functionName)
+      , runOnHost = False
       }
     , Cmd.batch
         [ Http.get
@@ -125,7 +127,11 @@ update msg model =
         GotText result ->
             case result of
                 Ok source ->
-                    ( evaluateFullSource (FullCode source) model, notifyIn CheckGenerateOutputs 100 )
+                    let
+                        ( newModel, newCmd ) =
+                            updateCurrentChecksum (evaluateFullSource (FullCode source) model)
+                    in
+                    ( newModel, Cmd.batch [ newCmd, notifyIn CheckGenerateOutputs 100 ] )
 
                 Err error ->
                     ( { model
@@ -220,6 +226,9 @@ update msg model =
             else
                 ( model, Cmd.none )
 
+        RunOnHostChanged runOnHost ->
+            ( { model | runOnHost = runOnHost }, Cmd.none )
+
         Poll ->
             let
                 checkViewport : Cmd FrontendMsg
@@ -244,7 +253,7 @@ updateFromBackend msg model =
         Startup { interactives, scroll, checksum, fileName } ->
             let
                 ( newModel, cmd ) =
-                    updateFullSource
+                    updateCurrentChecksum
                         { model
                             | interactives = interactives
                             , checksum = Just checksum
@@ -268,12 +277,12 @@ updateFromBackend msg model =
             case model.source of
                 Just source ->
                     ( model
-                    , Cmd.none
-                      --, Http.post
-                      --    { url = "/_x/write/src/Host.elm"
-                      --    , body = Http.stringBody "application/text" (getHostText source)
-                      --    , expect = Http.expectWhatever WroteText
-                      --    }
+                      --, Cmd.none
+                    , Http.post
+                        { url = "/_x/write/src/Host.elm"
+                        , body = Http.stringBody "application/text" (getHostText source)
+                        , expect = Http.expectWhatever WroteText
+                        }
                     )
 
                 Nothing ->
@@ -285,8 +294,8 @@ updateFromBackend msg model =
             )
 
 
-updateFullSource : Model -> ( Model, Cmd FrontendMsg )
-updateFullSource model =
+updateCurrentChecksum : Model -> ( Model, Cmd FrontendMsg )
+updateCurrentChecksum model =
     case ( model.source, model.checksum ) of
         ( Just (FullCode source), Just modelChecksum ) ->
             let
@@ -380,13 +389,8 @@ getHostText fullSource =
                 |> Elm.declaration "functionList"
                 |> Elm.ToString.declaration
                 |> List.map .body
-
-        (FullCode fullSourceText) =
-            fullSource
     in
-    fullSourceText
-        ++ "\n\n"
-        ++ String.join "\n" maybeDeclarationList
+    String.join "\n" maybeDeclarationList
 
 
 
@@ -1030,7 +1034,11 @@ view model =
                     ]
                     (Element.text "elm-clerk")
                     :: viewError model.error
-                    ++ (model.fileList |> List.map viewFileListItem)
+                    ++ (Element.column [ Element.spacing 4 ] (model.fileList |> List.map viewFileListItem)
+                            |> Element.el [ Element.paddingXY 0 4 ]
+                            |> List.singleton
+                       )
+                    ++ viewSettings model.runOnHost
                     ++ (case ( model.source, model.currentFileName, model.error ) of
                             ( Just source, _, _ ) ->
                                 model.sections
@@ -1085,6 +1093,27 @@ viewFileListItem (FileName listItem) =
         { onPress = Just (ListItemClicked (FileName listItem))
         , label = Element.text listItem
         }
+
+
+viewSettings : Bool -> List (Element FrontendMsg)
+viewSettings runOnHost =
+    Element.Input.checkbox []
+        { label = Element.Input.labelRight [] (Element.text "Run on host")
+        , checked = runOnHost
+        , onChange = RunOnHostChanged
+        , icon = Element.Input.defaultCheckbox
+        }
+        |> Element.el [ Element.Border.solid, Element.Border.width 1, Element.padding 9 ]
+        |> Element.el [ Element.paddingXY 0 4 ]
+        |> List.singleton
+
+
+
+--= Label LabelLocation (List (Attribute msg)) (Element msg)
+--{ onChange : Bool -> msg
+--, icon : Bool -> Element msg
+--, checked : Bool
+--, label : Label msg
 
 
 viewSection : List Viewer -> List HostViewer -> IdDict FunctionName Output -> IdDict FunctionName Function -> Interactives -> Section -> Element FrontendMsg

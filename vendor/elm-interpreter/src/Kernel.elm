@@ -1,4 +1,4 @@
-module Kernel exposing (EvalFunction, InSelector, OutSelector, Selector, To, anything, char, encodedValue, four, function, functionList, html, int, list, listIn, maybe, one, string, three, to, tuple, tupleIn, two)
+module Kernel exposing (EvalFunction, InSelector, OutSelector, Selector, To, anything, char, constant, encodedValue, four, function, functionList, html, int, list, listIn, maybe, one, string, three, to, tuple, tupleIn, two)
 
 import Array exposing (Array)
 import Bitwise
