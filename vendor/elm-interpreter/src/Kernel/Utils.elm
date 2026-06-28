@@ -4,7 +4,7 @@ import Array
 import Elm.Syntax.ModuleName exposing (ModuleName)
 import EvalResult
 import FastDict as Dict exposing (Dict)
-import InterpreterTypes exposing (Env, Eval, EvalErrorData, PartiallyAppliedFunction(..), Value(..))
+import InterpreterTypes exposing (Env, Eval, EvalErrorData, Value(..))
 import Value exposing (typeError)
 
 
@@ -205,8 +205,8 @@ compareListHelp ll rl env =
                     ok
 
 
-comparison : List Order -> ModuleName -> ( Int, List Value -> Eval Value )
-comparison orders _ =
+comparison : List Order -> ModuleName -> String -> ( Int, List Value -> Eval Value )
+comparison orders _ _ =
     ( 2
     , \args cfg env ->
         case args of

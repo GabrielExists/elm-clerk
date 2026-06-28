@@ -1,8 +1,8 @@
 module CoreTests.Result exposing (suite)
 
+import InterpreterTypes exposing (Value(..))
 import Test exposing (Test, describe)
 import TestUtils exposing (evalTest, result)
-import InterpreterTypes exposing (Value(..))
 
 
 isEven : Int -> Result String Int
