@@ -1,9 +1,9 @@
 module CoreTests.String exposing (suite)
 
 import Expect
+import InterpreterTypes exposing (Value(..))
 import Test exposing (Test, describe, test)
 import TestUtils exposing (evalTest_, list)
-import InterpreterTypes exposing (Value(..))
 
 
 suite : Test

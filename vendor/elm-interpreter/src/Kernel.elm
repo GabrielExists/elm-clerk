@@ -2,19 +2,10 @@ module Kernel exposing (EvalFunction, InSelector, OutSelector, Selector, To, any
 
 import Array exposing (Array)
 import Bitwise
-import Core.Array
-import Core.Basics
-import Core.Bitwise
-import Core.Char
-import Core.Debug
-import Core.Elm.JsArray
-import Core.List
-import Core.String
-import Core.VirtualDom
-import Elm.Syntax.Expression as Expression exposing (Expression(..), FunctionImplementation)
+import Elm.Syntax.Expression as Expression exposing (Expression)
 import Elm.Syntax.ModuleName exposing (ModuleName)
 import Elm.Syntax.Node as Node exposing (Node)
-import Elm.Syntax.Pattern exposing (Pattern(..), QualifiedNameRef)
+import Elm.Syntax.Pattern exposing (Pattern, QualifiedNameRef)
 import Environment
 import EvalResult
 import FastDict as Dict exposing (Dict)
@@ -26,7 +17,6 @@ import Kernel.String
 import Kernel.Utils
 import Maybe.Extra
 import Value exposing (typeError)
-import VirtualDom
 
 
 type alias EvalFunction =
@@ -41,138 +31,138 @@ functionList : EvalFunction -> Dict ModuleName (Dict String ( Int, List Value ->
 functionList evalFunction =
     [ -- Elm.Kernel.Basics
       ( [ "Elm", "Kernel", "Basics" ]
-      , [ ( "acos", one float to float acos Core.Basics.acos )
-        , ( "add", twoNumbers (+) (+) Core.Basics.add )
-        , ( "and", two bool bool to bool (&&) Core.Basics.and )
-        , ( "asin", one float to float asin Core.Basics.asin )
-        , ( "atan", one float to float atan Core.Basics.atan )
-        , ( "atan2", two float float to float atan2 Core.Basics.atan2 )
-        , ( "ceiling", one float to int ceiling Core.Basics.ceiling )
-        , ( "cos", one float to float cos Core.Basics.cos )
+      , [ ( "acos", one float to float acos )
+        , ( "add", twoNumbers (+) (+) )
+        , ( "and", two bool bool to bool (&&) )
+        , ( "asin", one float to float asin )
+        , ( "atan", one float to float atan )
+        , ( "atan2", two float float to float atan2 )
+        , ( "ceiling", one float to int ceiling )
+        , ( "cos", one float to float cos )
         , ( "e", constant float e )
-        , ( "fdiv", two float float to float (/) Core.Basics.fdiv )
-        , ( "floor", one float to int floor Core.Basics.floor )
-        , ( "idiv", two int int to int (//) Core.Basics.idiv )
-        , ( "isInfinite", one float to bool isInfinite Core.Basics.isInfinite )
-        , ( "isNaN", one float to bool isNaN Core.Basics.isNaN )
-        , ( "log", one float to float (logBase e) log )
-        , ( "modBy", two int int to int modBy Core.Basics.modBy )
-        , ( "mul", twoNumbers (*) (*) Core.Basics.mul )
-        , ( "not", one bool to bool not Core.Basics.not )
-        , ( "or", two bool bool to bool (||) Core.Basics.or )
+        , ( "fdiv", two float float to float (/) )
+        , ( "floor", one float to int floor )
+        , ( "idiv", two int int to int (//) )
+        , ( "isInfinite", one float to bool isInfinite )
+        , ( "isNaN", one float to bool isNaN )
+        , ( "log", one float to float (logBase e) )
+        , ( "modBy", two int int to int modBy )
+        , ( "mul", twoNumbers (*) (*) )
+        , ( "not", one bool to bool not )
+        , ( "or", two bool bool to bool (||) )
         , ( "pi", constant float pi )
-        , ( "pow", twoNumbers (^) (^) Core.Basics.pow )
-        , ( "remainderBy", two int int to int remainderBy Core.Basics.remainderBy )
-        , ( "round", one float to int round Core.Basics.round )
-        , ( "sin", one float to float sin Core.Basics.sin )
-        , ( "sqrt", one float to float sqrt Core.Basics.sqrt )
-        , ( "sub", twoNumbers (-) (-) Core.Basics.sub )
-        , ( "tan", one float to float tan Core.Basics.tan )
-        , ( "toFloat", one int to float toFloat Core.Basics.toFloat )
-        , ( "truncate", one float to int truncate Core.Basics.truncate )
-        , ( "xor", two bool bool to bool xor Core.Basics.xor )
+        , ( "pow", twoNumbers (^) (^) )
+        , ( "remainderBy", two int int to int remainderBy )
+        , ( "round", one float to int round )
+        , ( "sin", one float to float sin )
+        , ( "sqrt", one float to float sqrt )
+        , ( "sub", twoNumbers (-) (-) )
+        , ( "tan", one float to float tan )
+        , ( "toFloat", one int to float toFloat )
+        , ( "truncate", one float to int truncate )
+        , ( "xor", two bool bool to bool xor )
         ]
       )
 
     -- Elm.Kernel.Bitwise
     , ( [ "Elm", "Kernel", "Bitwise" ]
-      , [ ( "and", two int int to int Bitwise.and Core.Bitwise.and )
-        , ( "complement", one int to int Bitwise.complement Core.Bitwise.complement )
-        , ( "or", two int int to int Bitwise.or Core.Bitwise.or )
-        , ( "shiftLeftBy", two int int to int Bitwise.shiftLeftBy Core.Bitwise.shiftLeftBy )
-        , ( "shiftRightBy", two int int to int Bitwise.shiftRightBy Core.Bitwise.shiftRightBy )
-        , ( "shiftRightZfBy", two int int to int Bitwise.shiftRightZfBy Core.Bitwise.shiftRightZfBy )
-        , ( "xor", two int int to int Bitwise.xor Core.Bitwise.xor )
+      , [ ( "and", two int int to int Bitwise.and )
+        , ( "complement", one int to int Bitwise.complement )
+        , ( "or", two int int to int Bitwise.or )
+        , ( "shiftLeftBy", two int int to int Bitwise.shiftLeftBy )
+        , ( "shiftRightBy", two int int to int Bitwise.shiftRightBy )
+        , ( "shiftRightZfBy", two int int to int Bitwise.shiftRightZfBy )
+        , ( "xor", two int int to int Bitwise.xor )
         ]
       )
 
     -- Elm.Kernel.Char
     , ( [ "Elm", "Kernel", "Char" ]
-      , [ ( "fromCode", one int to char Char.fromCode Core.Char.fromCode )
-        , ( "toCode", one char to int Char.toCode Core.Char.toCode )
-        , ( "toLocaleLower", one char to char Char.toLocaleLower Core.Char.toLocaleLower )
-        , ( "toLocaleUpper", one char to char Char.toLocaleUpper Core.Char.toLocaleUpper )
-        , ( "toLower", one char to char Char.toLower Core.Char.toLower )
-        , ( "toUpper", one char to char Char.toUpper Core.Char.toUpper )
+      , [ ( "fromCode", one int to char Char.fromCode )
+        , ( "toCode", one char to int Char.toCode )
+        , ( "toLocaleLower", one char to char Char.toLocaleLower )
+        , ( "toLocaleUpper", one char to char Char.toLocaleUpper )
+        , ( "toLower", one char to char Char.toLower )
+        , ( "toUpper", one char to char Char.toUpper )
         ]
       )
 
     -- Elm.Kernel.Debug
     , ( [ "Elm", "Kernel", "Debug" ]
-      , [ ( "log", twoWithError string anything to anything Kernel.Debug.log Core.Debug.log )
-        , ( "toString", one anything to string Value.toString Core.Debug.toString )
-        , ( "todo", oneWithError string to anything Kernel.Debug.todo Core.Debug.todo )
+      , [ ( "log", twoWithError string anything to anything Kernel.Debug.log )
+        , ( "toString", one anything to string Value.toString )
+        , ( "todo", oneWithError string to anything Kernel.Debug.todo )
         ]
       )
 
     -- Elm.Kernel.JsArray
     , ( [ "Elm", "Kernel", "JsArray" ]
-      , [ ( "appendN", three int (jsArray anything) (jsArray anything) to (jsArray anything) Kernel.JsArray.appendN Core.Elm.JsArray.appendN )
+      , [ ( "appendN", three int (jsArray anything) (jsArray anything) to (jsArray anything) Kernel.JsArray.appendN )
         , ( "empty", zero to (jsArray anything) Array.empty )
-        , ( "foldr", threeWithError (function2 evalFunction anything anything to anything) anything (jsArray anything) to anything Kernel.JsArray.foldr Core.Elm.JsArray.foldr )
-        , ( "foldl", threeWithError (function2 evalFunction anything anything to anything) anything (jsArray anything) to anything Kernel.JsArray.foldl Core.Elm.JsArray.foldl )
-        , ( "initialize", threeWithError int int (function evalFunction int to anything) to (jsArray anything) Kernel.JsArray.initialize Core.Elm.JsArray.initialize )
-        , ( "initializeFromList", two int anyList to (tuple (jsArray anything) anyList) Kernel.JsArray.initializeFromList Core.Elm.JsArray.initializeFromList )
-        , ( "length", one (jsArray anything) to int Array.length Core.Elm.JsArray.length )
-        , ( "map", twoWithError (function evalFunction anything to anything) (jsArray anything) to (jsArray anything) Kernel.JsArray.map Core.Elm.JsArray.map )
-        , ( "indexedMap", twoWithError (function2 evalFunction int anything to anything) (jsArray anything) to (jsArray anything) Kernel.JsArray.indexedMap Core.Elm.JsArray.indexedMap )
-        , ( "push", two anything (jsArray anything) to (jsArray anything) Array.push Core.Elm.JsArray.push )
-        , ( "slice", three int int (jsArray anything) to (jsArray anything) Array.slice Core.Elm.JsArray.slice )
-        , ( "singleton", one anything to (jsArray anything) (List.singleton >> Array.fromList) Core.Elm.JsArray.singleton )
-        , ( "unsafeGet", twoWithError int (jsArray anything) to anything Kernel.JsArray.unsafeGet Core.Elm.JsArray.unsafeGet )
-        , ( "unsafeSet", three int anything (jsArray anything) to (jsArray anything) Array.set Core.Elm.JsArray.unsafeSet )
+        , ( "foldr", threeWithError (function2 evalFunction anything anything to anything) anything (jsArray anything) to anything Kernel.JsArray.foldr )
+        , ( "foldl", threeWithError (function2 evalFunction anything anything to anything) anything (jsArray anything) to anything Kernel.JsArray.foldl )
+        , ( "initialize", threeWithError int int (function evalFunction int to anything) to (jsArray anything) Kernel.JsArray.initialize )
+        , ( "initializeFromList", two int anyList to (tuple (jsArray anything) anyList) Kernel.JsArray.initializeFromList )
+        , ( "length", one (jsArray anything) to int Array.length )
+        , ( "map", twoWithError (function evalFunction anything to anything) (jsArray anything) to (jsArray anything) Kernel.JsArray.map )
+        , ( "indexedMap", twoWithError (function2 evalFunction int anything to anything) (jsArray anything) to (jsArray anything) Kernel.JsArray.indexedMap )
+        , ( "push", two anything (jsArray anything) to (jsArray anything) Array.push )
+        , ( "slice", three int int (jsArray anything) to (jsArray anything) Array.slice )
+        , ( "singleton", one anything to (jsArray anything) (List.singleton >> Array.fromList) )
+        , ( "unsafeGet", twoWithError int (jsArray anything) to anything Kernel.JsArray.unsafeGet )
+        , ( "unsafeSet", three int anything (jsArray anything) to (jsArray anything) Array.set )
         ]
       )
 
     -- Elm.Kernel.List
     , ( [ "Elm", "Kernel", "List" ]
-      , [ ( "cons", two anything anyList to anyList (::) Core.List.cons )
-        , ( "fromArray", one (jsArray anything) to anyList Array.toList Core.Array.toList )
-        , ( "toArray", one anyList to (jsArray anything) Array.fromList Core.Array.fromList )
+      , [ ( "cons", two anything anyList to anyList (::) )
+        , ( "fromArray", one (jsArray anything) to anyList Array.toList )
+        , ( "toArray", one anyList to (jsArray anything) Array.fromList )
         ]
       )
 
     -- Elm.Kernel.String
     , ( [ "Elm", "Kernel", "String" ]
-      , [ ( "length", one string to int String.length Core.String.length )
-        , ( "toFloat", one string to (maybe float) String.toFloat Core.String.toFloat )
-        , ( "toInt", one string to (maybe int) String.toInt Core.String.toInt )
-        , ( "toLower", one string to string String.toLower Core.String.toLower )
-        , ( "toUpper", one string to string String.toUpper Core.String.toUpper )
-        , ( "append", two string string to string String.append Core.String.append )
-        , ( "cons", two char string to string String.cons Core.String.cons )
-        , ( "contains", two string string to bool String.contains Core.String.contains )
-        , ( "endsWith", two string string to bool String.endsWith Core.String.endsWith )
-        , ( "filter", twoWithError (function evalFunction char to bool) string to string Kernel.String.filter Core.String.filter )
-        , ( "foldl", threeWithError (function2 evalFunction char anything to anything) anything string to anything Kernel.String.foldl Core.String.foldl )
-        , ( "foldr", threeWithError (function2 evalFunction char anything to anything) anything string to anything Kernel.String.foldr Core.String.foldr )
-        , ( "fromList", one (list char) to string String.fromList Core.String.fromList )
-        , ( "fromNumber", oneWithError anything to string Kernel.String.fromNumber Core.String.fromFloat ) -- TODO: `fromFloat` is not the same as `fromNumber`
-        , ( "indexes", two string string to (list int) String.indexes Core.String.indexes )
-        , ( "join", two string (jsArray string) to string (\s a -> String.join s (Array.toList a)) Core.String.join )
-        , ( "lines", one string to (list string) String.lines Core.String.lines )
-        , ( "reverse", one string to string String.reverse Core.String.reverse )
-        , ( "slice", three int int string to string String.slice Core.String.slice )
-        , ( "split", two string string to (jsArray string) (\s l -> Array.fromList (String.split s l)) Core.String.split )
-        , ( "startsWith", two string string to bool String.startsWith Core.String.startsWith )
-        , ( "trim", one string to string String.trim Core.String.trim )
-        , ( "trimLeft", one string to string String.trimLeft Core.String.trimLeft )
-        , ( "trimRight", one string to string String.trimRight Core.String.trimRight )
-        , ( "uncons", one string to (maybe (tuple char string)) String.uncons Core.String.uncons )
-        , ( "words", one string to (list string) String.words Core.String.words )
+      , [ ( "length", one string to int String.length )
+        , ( "toFloat", one string to (maybe float) String.toFloat )
+        , ( "toInt", one string to (maybe int) String.toInt )
+        , ( "toLower", one string to string String.toLower )
+        , ( "toUpper", one string to string String.toUpper )
+        , ( "append", two string string to string String.append )
+        , ( "cons", two char string to string String.cons )
+        , ( "contains", two string string to bool String.contains )
+        , ( "endsWith", two string string to bool String.endsWith )
+        , ( "filter", twoWithError (function evalFunction char to bool) string to string Kernel.String.filter )
+        , ( "foldl", threeWithError (function2 evalFunction char anything to anything) anything string to anything Kernel.String.foldl )
+        , ( "foldr", threeWithError (function2 evalFunction char anything to anything) anything string to anything Kernel.String.foldr )
+        , ( "fromList", one (list char) to string String.fromList )
+        , ( "fromNumber", oneWithError anything to string Kernel.String.fromNumber ) -- TODO: `fromFloat` is not the same as `fromNumber`
+        , ( "indexes", two string string to (list int) String.indexes )
+        , ( "join", two string (jsArray string) to string (\s a -> String.join s (Array.toList a)) )
+        , ( "lines", one string to (list string) String.lines )
+        , ( "reverse", one string to string String.reverse )
+        , ( "slice", three int int string to string String.slice )
+        , ( "split", two string string to (jsArray string) (\s l -> Array.fromList (String.split s l)) )
+        , ( "startsWith", two string string to bool String.startsWith )
+        , ( "trim", one string to string String.trim )
+        , ( "trimLeft", one string to string String.trimLeft )
+        , ( "trimRight", one string to string String.trimRight )
+        , ( "uncons", one string to (maybe (tuple char string)) String.uncons )
+        , ( "words", one string to (list string) String.words )
         ]
       )
 
     -- Elm.Kernel.Utils
     , ( [ "Elm", "Kernel", "Utils" ]
-      , [ ( "append", twoWithError anything anything to anything Kernel.Utils.append Core.Basics.append )
+      , [ ( "append", twoWithError anything anything to anything Kernel.Utils.append )
         , ( "ge", Kernel.Utils.comparison [ GT, EQ ] )
         , ( "gt", Kernel.Utils.comparison [ GT ] )
         , ( "le", Kernel.Utils.comparison [ LT, EQ ] )
         , ( "lt", Kernel.Utils.comparison [ LT ] )
         , ( "equal", Kernel.Utils.comparison [ EQ ] )
         , ( "notEqual", Kernel.Utils.comparison [ LT, GT ] )
-        , ( "compare", twoWithError anything anything to order Kernel.Utils.compare Core.Basics.compare )
+        , ( "compare", twoWithError anything anything to order Kernel.Utils.compare )
         ]
       )
 
@@ -181,11 +171,11 @@ functionList evalFunction =
     --  Elm.Kernel.VirtualDom.style
     -- Elm.Kernel.VirtualDom
     , ( [ "Elm", "Kernel", "VirtualDom" ]
-      , [ ( "node", three string (list attr) (list html) to html Kernel.Html.node Core.VirtualDom.node )
-        , ( "nodeNS", four string string (list attr) (list html) to html Kernel.Html.nodeNS Core.VirtualDom.nodeNS )
-        , ( "text", one string to html Kernel.Html.text Core.VirtualDom.node )
-        , ( "style", two string string to attr Kernel.Html.style Core.VirtualDom.style )
-        , ( "attribute", two string string to attr Kernel.Html.attribute Core.VirtualDom.attribute )
+      , [ ( "node", three string (list attr) (list html) to html Kernel.Html.node )
+        , ( "nodeNS", four string string (list attr) (list html) to html Kernel.Html.nodeNS )
+        , ( "text", one string to html Kernel.Html.text )
+        , ( "style", two string string to attr Kernel.Html.style )
+        , ( "attribute", two string string to attr Kernel.Html.attribute )
         ]
       )
     ]
@@ -193,25 +183,11 @@ functionList evalFunction =
             (\( moduleName, moduleFunctions ) ->
                 ( moduleName
                 , moduleFunctions
-                    |> List.map (\( k, f ) -> ( k, f moduleName ))
+                    |> List.map (\( k, f ) -> ( k, f moduleName k ))
                     |> Dict.fromList
                 )
             )
         |> Dict.fromList
-
-
-log : FunctionImplementation
-log =
-    { name = Node.empty "log"
-    , arguments = [ Node.empty <| VarPattern "$x" ]
-    , expression =
-        Node.empty <|
-            Expression.Application
-                [ Core.Basics.logBase.expression
-                , Node.empty <| FunctionOrValue [] "e"
-                , Node.empty <| FunctionOrValue [] "$x"
-                ]
-    }
 
 
 
@@ -511,16 +487,16 @@ encodedValue =
                 Triple first second third ->
                     Custom [] "Triple" [ encodedValue.toValue first, encodedValue.toValue second, encodedValue.toValue third ]
 
-                Record dict ->
+                Record _ ->
                     Custom [] "Record" []
 
                 Custom moduleName name values ->
                     Custom [] "Custom" [ (list string).toValue moduleName, string.toValue name, (list encodedValue).toValue values ]
 
-                PartiallyApplied (PartiallyAppliedFunction env values nodes maybeQualifiedNameRef node) ->
+                PartiallyApplied (PartiallyAppliedFunction _ _ _ _ _) ->
                     Custom [] "PartiallyApplied" []
 
-                JsArray array ->
+                JsArray _ ->
                     Custom [] "JsArray" []
 
                 List values ->
@@ -614,8 +590,8 @@ tuple firstSelector secondSelector =
     combinedInOut (tupleIn firstSelector secondSelector) (tupleOut firstSelector secondSelector)
 
 
-constant : OutSelector res x -> res -> ModuleName -> ( Int, List Value -> Eval Value )
-constant selector const _ =
+constant : OutSelector res x -> res -> ModuleName -> String -> ( Int, List Value -> Eval Value )
+constant selector const _ _ =
     ( 0
     , \args _ env ->
         case args of
@@ -709,6 +685,7 @@ zero :
     -> OutSelector out ox
     -> out
     -> ModuleName
+    -> String
     -> ( Int, List Value -> Eval Value )
 zero _ output f =
     zeroWithError To output (Ok f)
@@ -719,8 +696,9 @@ zeroWithError :
     -> OutSelector out ox
     -> Result EvalErrorData out
     -> ModuleName
+    -> String
     -> ( Int, List Value -> Eval Value )
-zeroWithError _ output f _ =
+zeroWithError _ output f _ _ =
     ( 0
     , \args _ env ->
         case args of
@@ -737,8 +715,8 @@ one :
     -> To
     -> OutSelector out ox
     -> (a -> out)
-    -> FunctionImplementation
     -> ModuleName
+    -> String
     -> ( Int, List Value -> Eval Value )
 one firstSelector _ output f =
     oneWithError firstSelector To output (\v _ _ -> EvalResult.succeed (f v))
@@ -749,10 +727,10 @@ oneWithError :
     -> To
     -> OutSelector out xo
     -> (a -> Eval out)
-    -> FunctionImplementation
     -> ModuleName
+    -> String
     -> ( Int, List Value -> Eval Value )
-oneWithError firstSelector _ output f implementation moduleName =
+oneWithError firstSelector _ output f moduleName functionName =
     ( 1
     , \args cfg env ->
         let
@@ -771,7 +749,7 @@ oneWithError firstSelector _ output f implementation moduleName =
                         err (Value.toString arg)
 
             [] ->
-                partiallyApply moduleName args implementation
+                partiallyApply moduleName functionName args
 
             _ ->
                 err "more"
@@ -784,8 +762,8 @@ two :
     -> To
     -> OutSelector out xo
     -> (a -> b -> out)
-    -> FunctionImplementation
     -> ModuleName
+    -> String
     -> ( Int, List Value -> Eval Value )
 two firstSelector secondSelector _ output f =
     twoWithError firstSelector secondSelector To output (\l r _ _ -> EvalResult.succeed (f l r))
@@ -797,10 +775,10 @@ twoWithError :
     -> To
     -> OutSelector out xo
     -> (a -> b -> Eval out)
-    -> FunctionImplementation
     -> ModuleName
+    -> String
     -> ( Int, List Value -> Eval Value )
-twoWithError firstSelector secondSelector _ output f implementation moduleName =
+twoWithError firstSelector secondSelector _ output f moduleName functionName =
     ( 2
     , \args cfg env ->
         let
@@ -824,10 +802,10 @@ twoWithError firstSelector secondSelector _ output f implementation moduleName =
                                     |> EvalResult.map output.toValue
 
             [ _ ] ->
-                partiallyApply moduleName args implementation
+                partiallyApply moduleName functionName args
 
             [] ->
-                partiallyApply moduleName args implementation
+                partiallyApply moduleName functionName args
 
             _ ->
                 let
@@ -850,8 +828,8 @@ three :
     -> To
     -> OutSelector out xo
     -> (a -> b -> c -> out)
-    -> FunctionImplementation
     -> ModuleName
+    -> String
     -> ( Int, List Value -> Eval Value )
 three firstSelector secondSelector thirdSelector _ output f =
     threeWithError firstSelector secondSelector thirdSelector To output (\l m r _ _ -> EvalResult.succeed (f l m r))
@@ -864,10 +842,10 @@ threeWithError :
     -> To
     -> OutSelector out xo
     -> (a -> b -> c -> Eval out)
-    -> FunctionImplementation
     -> ModuleName
+    -> String
     -> ( Int, List Value -> Eval Value )
-threeWithError firstSelector secondSelector thirdSelector _ output f implementation moduleName =
+threeWithError firstSelector secondSelector thirdSelector _ output f moduleName functionName =
     ( 3
     , \args cfg env ->
         let
@@ -890,13 +868,13 @@ threeWithError firstSelector secondSelector thirdSelector _ output f implementat
                         err (String.join ", " (List.map Value.toString args))
 
             [ _, _ ] ->
-                partiallyApply moduleName args implementation
+                partiallyApply moduleName functionName args
 
             [ _ ] ->
-                partiallyApply moduleName args implementation
+                partiallyApply moduleName functionName args
 
             [] ->
-                partiallyApply moduleName args implementation
+                partiallyApply moduleName functionName args
 
             _ ->
                 err ("[ " ++ String.join ", " (List.map Value.toString args) ++ " ]")
@@ -911,8 +889,8 @@ four :
     -> To
     -> OutSelector out xo
     -> (a -> b -> c -> d -> out)
-    -> FunctionImplementation
     -> ModuleName
+    -> String
     -> ( Int, List Value -> Eval Value )
 four firstSelector secondSelector thirdSelector fourthSelector _ output f =
     fourWithError firstSelector secondSelector thirdSelector fourthSelector To output (\l m1 m2 r _ _ -> EvalResult.succeed (f l m1 m2 r))
@@ -926,10 +904,10 @@ fourWithError :
     -> To
     -> OutSelector out xo
     -> (a -> b -> c -> d -> Eval out)
-    -> FunctionImplementation
     -> ModuleName
+    -> String
     -> ( Int, List Value -> Eval Value )
-fourWithError firstSelector secondSelector thirdSelector fourthSelector _ output f implementation moduleName =
+fourWithError firstSelector secondSelector thirdSelector fourthSelector _ output f moduleName functionName =
     ( 3
     , \args cfg env ->
         let
@@ -952,47 +930,47 @@ fourWithError firstSelector secondSelector thirdSelector fourthSelector _ output
                         err (String.join ", " (List.map Value.toString args))
 
             [ _, _, _ ] ->
-                partiallyApply moduleName args implementation
+                partiallyApply moduleName functionName args
 
             [ _, _ ] ->
-                partiallyApply moduleName args implementation
+                partiallyApply moduleName functionName args
 
             [ _ ] ->
-                partiallyApply moduleName args implementation
+                partiallyApply moduleName functionName args
 
             [] ->
-                partiallyApply moduleName args implementation
+                partiallyApply moduleName functionName args
 
             _ ->
                 err ("[ " ++ String.join ", " (List.map Value.toString args) ++ " ]")
     )
 
 
-partiallyApply : ModuleName -> List Value -> FunctionImplementation -> EvalResult Value
-partiallyApply moduleName args implementation =
+partiallyApply : ModuleName -> String -> List Value -> EvalResult Value
+partiallyApply moduleName functionName args =
     EvalResult.fromResult <|
         Ok <|
             PartiallyApplied
                 (PartiallyAppliedFunction
                     (Environment.empty moduleName)
                     args
-                    implementation.arguments
+                    []
                     (Just
                         { moduleName = moduleName
-                        , name = Node.value implementation.name
+                        , name = functionName
                         }
                     )
-                    implementation.expression
+                    (Node.empty (Expression.FunctionOrValue moduleName functionName))
                 )
 
 
 twoNumbers :
     (Int -> Int -> Int)
     -> (Float -> Float -> Float)
-    -> FunctionImplementation
     -> ModuleName
+    -> String
     -> ( Int, List Value -> Eval Value )
-twoNumbers fInt fFloat implementation moduleName =
+twoNumbers fInt fFloat moduleName functionName =
     ( 2
     , \args _ env ->
         case args of
@@ -1009,10 +987,10 @@ twoNumbers fInt fFloat implementation moduleName =
                 EvalResult.succeed <| Float (fFloat lf rf)
 
             [ _ ] ->
-                partiallyApply moduleName args implementation
+                partiallyApply moduleName functionName args
 
             [] ->
-                partiallyApply moduleName args implementation
+                partiallyApply moduleName functionName args
 
             _ ->
                 EvalResult.fail <| typeError env "Expected two numbers"

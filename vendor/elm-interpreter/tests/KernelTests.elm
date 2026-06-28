@@ -167,7 +167,7 @@ visitFunction { declaration } =
 
 testDefined : ( ( ModuleName, String ), List String ) -> Test
 testDefined ( ( moduleName, name ), requiredBy ) =
-    case Dict.get moduleName (Kernel.functions Eval.Expression.evalFunction) of
+    case Dict.get moduleName (Kernel.functionList Eval.Expression.evalFunction) of
         Just kernelModule ->
             if Dict.member name kernelModule then
                 let

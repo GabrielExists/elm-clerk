@@ -2,10 +2,10 @@ module CoreTests.Basics exposing (suite)
 
 import Array
 import Dict
+import InterpreterTypes exposing (Value(..))
 import Set
 import Test exposing (Test, describe)
 import TestUtils exposing (evalTest, evalTest_, list)
-import InterpreterTypes exposing (Value(..))
 import Value
 
 

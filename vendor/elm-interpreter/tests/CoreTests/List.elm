@@ -1,8 +1,8 @@
 module CoreTests.List exposing (suite)
 
+import InterpreterTypes exposing (Value(..))
 import Test exposing (Test, describe)
 import TestUtils exposing (evalTest, list, maybe, slowTest, tuple)
-import InterpreterTypes exposing (Value(..))
 
 
 suite : Test
