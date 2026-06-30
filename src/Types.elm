@@ -45,6 +45,7 @@ type alias Function =
     { function : PartiallyAppliedFunction
     , declaration : Declaration
     , pairs : List ( ParameterName, TypeName )
+    , return : TypeName
     }
 
 

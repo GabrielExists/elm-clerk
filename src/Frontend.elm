@@ -13,12 +13,15 @@ import Element.Font as Font
 import Element.Input
 import Element.Lazy
 import Elm
+import Elm.Arg
+import Elm.Op
 import Elm.Parser
 import Elm.Parser.Comments
 import Elm.Parser.Declarations
 import Elm.Syntax.Declaration exposing (Declaration(..))
 import Elm.Syntax.Expression exposing (Expression)
 import Elm.Syntax.File exposing (File)
+import Elm.Syntax.Module as Module
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Pattern exposing (Pattern(..))
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
@@ -280,7 +283,7 @@ updateFromBackend msg model =
                       --, Cmd.none
                     , Http.post
                         { url = "/_x/write/src/Host.elm"
-                        , body = Http.stringBody "application/text" (getHostText source)
+                        , body = Http.stringBody "application/text" (getHostText source model.functions)
                         , expect = Http.expectWhatever WroteText
                         }
                     )
@@ -362,15 +365,23 @@ parseSection (Code source) =
     ParserFast.run parser source
 
 
-getHostText : FullCode -> String
-getHostText fullSource =
+getHostText : FullCode -> IdDict FunctionName Function -> String
+getHostText fullSource functions =
     let
         maybeFile : Result Error File
         maybeFile =
             makeFile fullSource
 
-        maybeDeclarations : Maybe (List String)
-        maybeDeclarations =
+        maybeFileName : List String
+        maybeFileName =
+            maybeFile
+                |> Result.map .moduleDefinition
+                |> Result.map Node.value
+                |> Result.map Module.moduleName
+                |> Result.withDefault []
+
+        declarations : List String
+        declarations =
             Result.toMaybe maybeFile
                 |> Maybe.map
                     (\file ->
@@ -379,18 +390,111 @@ getHostText fullSource =
                             |> List.map Node.value
                             |> List.map extractNameFromDeclaration
                     )
-
-        maybeDeclarationList : List String
-        maybeDeclarationList =
-            maybeDeclarations
                 |> Maybe.withDefault []
-                |> List.map (\name -> Elm.tuple (Elm.string name) (Elm.val name))
+
+        fileListDeclaration : Elm.Declaration
+        fileListDeclaration =
+            declarations
+                |> List.filterMap
+                    (\name ->
+                        --Elm.fnBuilder
+                        --    (\arg1 arg2 ->
+                        --        Elm.Op.plus arg1 arg2
+                        --    )
+                        --    |> Elm.fnArg (Elm.Arg.var "arg1")
+                        --    |> Elm.fnArg (Elm.Arg.var "arg2")
+                        --    |> Elm.fnDone
+                        IdDict.get (FunctionName name) functions
+                            |> Maybe.map
+                                (\function ->
+                                    Elm.tuple (Elm.string name)
+                                        (Elm.apply
+                                            (Elm.value
+                                                { importFrom = [ "Kernel" ]
+                                                , name =
+                                                    case List.length function.pairs of
+                                                        0 ->
+                                                            "constant"
+
+                                                        1 ->
+                                                            "one"
+
+                                                        2 ->
+                                                            "two"
+
+                                                        3 ->
+                                                            "three"
+
+                                                        4 ->
+                                                            "four"
+
+                                                        _ ->
+                                                            "tooManyArguments"
+                                                , annotation = Nothing
+                                                }
+                                            )
+                                            ((function.pairs
+                                                |> List.map
+                                                    (\pair ->
+                                                        Elm.value
+                                                            { importFrom = [ "Kernel" ]
+                                                            , name =
+                                                                let
+                                                                    (TypeName typeName) =
+                                                                        Tuple.second pair
+                                                                in
+                                                                case typeName of
+                                                                    "Int" ->
+                                                                        "int"
+
+                                                                    _ ->
+                                                                        "unknown"
+                                                            , annotation = Nothing
+                                                            }
+                                                    )
+                                             )
+                                                ++ [ Elm.value
+                                                        { importFrom = [ "Kernel" ]
+                                                        , name = "to"
+                                                        , annotation = Nothing
+                                                        }
+                                                   , Elm.value
+                                                        { importFrom = [ "Kernel" ]
+                                                        , name =
+                                                            let
+                                                                (TypeName typeName) =
+                                                                    function.return
+                                                            in
+                                                            case typeName of
+                                                                "Int" ->
+                                                                    "int"
+
+                                                                _ ->
+                                                                    "unknown"
+                                                        , annotation = Nothing
+                                                        }
+                                                   , Elm.value
+                                                        { importFrom = maybeFileName
+                                                        , name = name
+                                                        , annotation = Nothing
+                                                        }
+                                                   , Elm.list
+                                                        (List.map Elm.string maybeFileName)
+                                                   , Elm.string name
+                                                   ]
+                                            )
+                                        )
+                                )
+                    )
                 |> Elm.list
                 |> Elm.declaration "functionList"
-                |> Elm.ToString.declaration
-                |> List.map .body
     in
-    String.join "\n" maybeDeclarationList
+    --Elm.file [ "My", "Module" ]
+    --    [ Elm.declaration "placeholder"
+    --        (Elm.string "a fancy string!")
+    --    ]
+    Elm.file [ "Host" ] [ fileListDeclaration ]
+        |> .contents
 
 
 
@@ -580,7 +684,7 @@ sectionFromParsed maybeEnv ( source, parsedSection ) =
 
                         Ok (PartiallyApplied ((PartiallyAppliedFunction _ alreadyApplied patterns _ _) as function)) ->
                             let
-                                maybePairs : Result OutputError (List ( ParameterName, TypeName ))
+                                maybePairs : Result OutputError ( List ( ParameterName, TypeName ), TypeName )
                                 maybePairs =
                                     parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
                             in
@@ -588,13 +692,14 @@ sectionFromParsed maybeEnv ( source, parsedSection ) =
                                 Err error ->
                                     ( EvaluatedSection source (Err error), Nothing )
 
-                                Ok pairs ->
+                                Ok ( pairs, return ) ->
                                     ( InteractiveSection source functionName
                                     , Just
                                         ( functionName
                                         , { function = function
                                           , declaration = declaration
                                           , pairs = pairs
+                                          , return = return
                                           }
                                         )
                                     )
@@ -651,7 +756,7 @@ applyPartiallyApplied evalInteractives partiallyApplied declaration =
         (PartiallyAppliedFunction baseEnv alreadyApplied patterns _ expression) =
             partiallyApplied
 
-        maybePairs : Result OutputError (List ( ParameterName, TypeName ))
+        maybePairs : Result OutputError ( List ( ParameterName, TypeName ), TypeName )
         maybePairs =
             parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
 
@@ -719,7 +824,7 @@ applyPartiallyApplied evalInteractives partiallyApplied declaration =
                         Result.Extra.foldlWhileOk
                             insertIntoEnvFromType
                             env.values
-                            pairs
+                            (Tuple.first pairs)
                     of
                         Ok newValues ->
                             { env
@@ -780,7 +885,7 @@ evaluate maybeEnv expressionNode =
 -- PARSE TOGETHER
 
 
-parseTogether : List Pattern -> Declaration -> Int -> Result OutputError (List ( ParameterName, TypeName ))
+parseTogether : List Pattern -> Declaration -> Int -> Result OutputError ( List ( ParameterName, TypeName ), TypeName )
 parseTogether patterns declaration numApplied =
     declarationTypeAnnotation declaration
         |> Result.map bigAnnotationToList
@@ -789,6 +894,14 @@ parseTogether patterns declaration numApplied =
                 List.map2 Tuple.pair (List.drop numApplied patterns) ann
                     |> Result.Extra.combineMap parseTogetherSingle
                     |> Result.map List.concat
+                    |> Result.andThen
+                        (\list ->
+                            List.Extra.last ann
+                                |> Result.fromMaybe (OutputError "No last part of annotation")
+                                |> Result.map annotationToString
+                                |> Result.map TypeName
+                                |> Result.map (\returnType -> ( list, returnType ))
+                        )
             )
 
 
@@ -1039,8 +1152,13 @@ view model =
                             |> List.singleton
                        )
                     ++ viewSettings model.runOnHost
+                    ++ (model.source
+                            |> Maybe.map List.singleton
+                            |> Maybe.withDefault []
+                            |> List.map (\source -> viewCode (Code (getHostText source model.functions)))
+                       )
                     ++ (case ( model.source, model.currentFileName, model.error ) of
-                            ( Just source, _, _ ) ->
+                            ( Just _, _, _ ) ->
                                 model.sections
                                     |> List.map
                                         (viewSection model.viewers
@@ -1050,7 +1168,6 @@ view model =
                                             model.interactives
                                         )
 
-                            --[ Element.text "Source" ]
                             ( _, Nothing, _ ) ->
                                 [ Element.el
                                     [ Font.family
