@@ -29,6 +29,24 @@ map func (IdDict dict transform) =
     IdDict (Dict.map func dict) transform
 
 
+filterMap : (String -> a -> Maybe b) -> IdDict k a -> IdDict k b
+filterMap func (IdDict dict transform) =
+    IdDict
+        (Dict.foldl
+            (\k v acc ->
+                case func k v of
+                    Just newValue ->
+                        Dict.insert k newValue acc
+
+                    Nothing ->
+                        acc
+            )
+            Dict.empty
+            dict
+        )
+        transform
+
+
 clear : IdDict kind value -> IdDict kind v
 clear (IdDict _ transform) =
     IdDict Dict.empty transform

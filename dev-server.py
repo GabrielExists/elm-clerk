@@ -10,7 +10,15 @@ import subprocess
 import requests
 import time
 
-CLEARED_CONTENTS = """
+CLEARED_CONTENTS = """module Host exposing (..)
+
+import InterpreterTypes exposing (Eval, Value)
+
+
+functionList : List ( String, ( Int, List Value -> Eval Value ) )
+functionList =
+    []
+
 """
 POLL_PERIOD = 4
 

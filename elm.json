@@ -6,6 +6,7 @@
         "vendor/elm-interpreter/src",
         "vendor/elm-interpreter/generated",
         "vendor/elm-interpreter/helpers",
+        "vendor/elm-interpreter/codegen",
         "vendor/elm-syntax/src"
     ],
     "elm-version": "0.19.1",

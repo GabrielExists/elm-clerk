@@ -13,6 +13,7 @@ import Element.Font as Font
 import Element.Input
 import Element.Lazy
 import Elm
+import Elm.Annotation
 import Elm.Arg
 import Elm.Op
 import Elm.Parser
@@ -29,7 +30,9 @@ import Elm.ToString
 import Eval.Expression
 import Eval.Module
 import FastDict as Dict exposing (Dict)
+import Gen.Kernel
 import Hash
+import Host
 import Html
 import Html.Attributes
 import Http
@@ -51,7 +54,7 @@ import Regex
 import Result.Extra
 import Task
 import ToString exposing (annotationToString, errorToString, evalErrorDataToString, httpErrorToString, patternToString)
-import Types exposing (BackendMsg(..), Cell(..), Code(..), FileName(..), FrontendModel, FrontendMsg(..), FullCode(..), Function, FunctionName(..), HostViewer, IdDict, Interactives(..), Markdown(..), Output, OutputError(..), OutputValue(..), ParameterName(..), ParsedSection, RawInteractiveValue(..), Section(..), ToBackend(..), ToFrontend(..), TypeName(..), Viewer)
+import Types exposing (BackendMsg(..), Cell(..), Code(..), Constant, FileName(..), FrontendModel, FrontendMsg(..), FullCode(..), Function, FunctionName(..), HostViewer, IdDict, Interactives(..), Markdown(..), Output, OutputError(..), OutputValue(..), ParameterName(..), ParsedSection, RawInteractiveValue(..), Section(..), ToBackend(..), ToFrontend(..), TypeName(..), Viewer)
 import UI.Source as Source
 import Url
 import Value
@@ -89,6 +92,7 @@ init _ key =
       , sections = []
       , interactives = Interactives.empty
       , functions = IdDict.empty (\(FunctionName functionName) -> functionName)
+      , constants = IdDict.empty (\(FunctionName functionName) -> functionName)
       , viewers = []
       , hostViewers = []
       , outputs = IdDict.empty (\(FunctionName functionName) -> functionName)
@@ -283,7 +287,7 @@ updateFromBackend msg model =
                       --, Cmd.none
                     , Http.post
                         { url = "/_x/write/src/Host.elm"
-                        , body = Http.stringBody "application/text" (getHostText source model.functions)
+                        , body = Http.stringBody "application/text" (getHostText source model.functions model.constants)
                         , expect = Http.expectWhatever WroteText
                         }
                     )
@@ -365,8 +369,8 @@ parseSection (Code source) =
     ParserFast.run parser source
 
 
-getHostText : FullCode -> IdDict FunctionName Function -> String
-getHostText fullSource functions =
+getHostText : FullCode -> IdDict FunctionName Function -> IdDict FunctionName Constant -> String
+getHostText fullSource functions constants =
     let
         maybeFile : Result Error File
         maybeFile =
@@ -394,7 +398,7 @@ getHostText fullSource functions =
 
         fileListDeclaration : Elm.Declaration
         fileListDeclaration =
-            declarations
+            (declarations
                 |> List.filterMap
                     (\name ->
                         --Elm.fnBuilder
@@ -404,75 +408,20 @@ getHostText fullSource functions =
                         --    |> Elm.fnArg (Elm.Arg.var "arg1")
                         --    |> Elm.fnArg (Elm.Arg.var "arg2")
                         --    |> Elm.fnDone
-                        IdDict.get (FunctionName name) functions
-                            |> Maybe.map
-                                (\function ->
+                        case ( IdDict.get (FunctionName name) functions, IdDict.get (FunctionName name) constants ) of
+                            ( Just function, _ ) ->
+                                Just <|
                                     Elm.tuple (Elm.string name)
                                         (Elm.apply
-                                            (Elm.value
-                                                { importFrom = [ "Kernel" ]
-                                                , name =
-                                                    case List.length function.pairs of
-                                                        0 ->
-                                                            "constant"
-
-                                                        1 ->
-                                                            "one"
-
-                                                        2 ->
-                                                            "two"
-
-                                                        3 ->
-                                                            "three"
-
-                                                        4 ->
-                                                            "four"
-
-                                                        _ ->
-                                                            "tooManyArguments"
-                                                , annotation = Nothing
-                                                }
-                                            )
+                                            (getCombinerFromNumArgs (List.length function.pairs))
                                             ((function.pairs
                                                 |> List.map
                                                     (\pair ->
-                                                        Elm.value
-                                                            { importFrom = [ "Kernel" ]
-                                                            , name =
-                                                                let
-                                                                    (TypeName typeName) =
-                                                                        Tuple.second pair
-                                                                in
-                                                                case typeName of
-                                                                    "Int" ->
-                                                                        "int"
-
-                                                                    _ ->
-                                                                        "unknown"
-                                                            , annotation = Nothing
-                                                            }
+                                                        getSelectorFromTypeName (Tuple.second pair)
                                                     )
                                              )
-                                                ++ [ Elm.value
-                                                        { importFrom = [ "Kernel" ]
-                                                        , name = "to"
-                                                        , annotation = Nothing
-                                                        }
-                                                   , Elm.value
-                                                        { importFrom = [ "Kernel" ]
-                                                        , name =
-                                                            let
-                                                                (TypeName typeName) =
-                                                                    function.return
-                                                            in
-                                                            case typeName of
-                                                                "Int" ->
-                                                                    "int"
-
-                                                                _ ->
-                                                                    "unknown"
-                                                        , annotation = Nothing
-                                                        }
+                                                ++ [ Gen.Kernel.values_.to
+                                                   , getSelectorFromTypeName function.return
                                                    , Elm.value
                                                         { importFrom = maybeFileName
                                                         , name = name
@@ -484,8 +433,28 @@ getHostText fullSource functions =
                                                    ]
                                             )
                                         )
-                                )
+
+                            ( _, Just (Types.Constant returnValue) ) ->
+                                Just <|
+                                    Elm.tuple (Elm.string name)
+                                        (Elm.apply
+                                            Gen.Kernel.values_.constant
+                                            [ getSelectorFromTypeName returnValue
+                                            , Elm.value
+                                                { importFrom = maybeFileName
+                                                , name = name
+                                                , annotation = Nothing
+                                                }
+                                            , Elm.list
+                                                (List.map Elm.string maybeFileName)
+                                            , Elm.string name
+                                            ]
+                                        )
+
+                            ( _, _ ) ->
+                                Nothing
                     )
+            )
                 |> Elm.list
                 |> Elm.declaration "functionList"
     in
@@ -495,6 +464,85 @@ getHostText fullSource functions =
     --    ]
     Elm.file [ "Host" ] [ fileListDeclaration ]
         |> .contents
+
+
+getSelectorFromTypeName : TypeName -> Elm.Expression
+getSelectorFromTypeName (TypeName typeName) =
+    case typeName of
+        "Int" ->
+            Elm.value
+                { importFrom = [ "Kernel" ]
+                , name = "int"
+                , annotation = Nothing
+                }
+
+        _ ->
+            case Debug.log "removeStartsWith \"List \" typeName" (removeStartsWith "List " (Debug.log "typeName" typeName)) of
+                Just inner ->
+                    Elm.apply
+                        (Elm.value
+                            { importFrom = [ "Kernel" ]
+                            , name = "list"
+                            , annotation = Nothing
+                            }
+                        )
+                        [ getSelectorFromTypeName
+                            (TypeName inner)
+                        ]
+
+                _ ->
+                    Elm.value
+                        { importFrom = [ "Kernel" ]
+                        , name = "unknown"
+                        , annotation = Nothing
+                        }
+
+
+getCombinerFromNumArgs numArgs =
+    case numArgs of
+        0 ->
+            Gen.Kernel.values_.constant
+
+        --Elm.value
+        --    { importFrom = [ "Kernel" ]
+        --    , name = "constant"
+        --    , annotation =
+        --        Elm.Annotation.function []
+        --            (Elm.Annotation.tuple Elm.Annotation.int
+        --                (Elm.Annotation.function
+        --                    [ Elm.Annotation.list (Elm.Annotation.namedWith [ "Kernel" ] "Value" []) ]
+        --                    (Elm.Annotation.namedWith [ "Kernel" ]
+        --                        "Eval"
+        --                        [ Elm.Annotation.namedWith [ "Kernel" ] "Value" [] ]
+        --                    )
+        --                )
+        --            )
+        --            |> Just
+        --    }
+        --constant : OutSelector res x -> res -> ModuleName -> String -> ( Int, List Value -> Eval Value )
+        1 ->
+            Gen.Kernel.values_.one
+
+        2 ->
+            Gen.Kernel.values_.two
+
+        3 ->
+            Gen.Kernel.values_.three
+
+        4 ->
+            Gen.Kernel.values_.four
+
+        _ ->
+            Elm.val "tooManyArguments"
+
+
+removeStartsWith : String -> String -> Maybe String
+removeStartsWith needle haystack =
+    if String.startsWith needle haystack then
+        Just <| String.dropLeft (String.length needle) haystack
+
+    else
+        Nothing
 
 
 
@@ -513,19 +561,20 @@ evaluateFullSource source model =
             maybeFile
                 |> Result.andThen Eval.Module.buildInitialEnv
 
-        ( viewers, sections, functions ) =
+        ( viewers, sections, ( functions, constants ) ) =
             evaluateSections source maybeEnv
     in
     { model
         | source = Just source
         , functions = functions
+        , constants = constants
         , viewers = viewers
         , hostViewers = makeHostViewers maybeEnv
         , sections = sections
     }
 
 
-evaluateSections : FullCode -> Result Error Env -> ( List Viewer, List Section, IdDict FunctionName Types.Function )
+evaluateSections : FullCode -> Result Error Env -> ( List Viewer, List Section, ( IdDict FunctionName Types.Function, IdDict FunctionName Types.Constant ) )
 evaluateSections source maybeEnv =
     let
         viewerSelector : Kernel.InSelector (List (Value -> InterpreterTypes.Config -> Env -> InterpreterTypes.EvalResult (Maybe Kernel.Html.Html))) {}
@@ -562,7 +611,7 @@ evaluateSections source maybeEnv =
                 |> Maybe.withDefault []
                 |> List.map transformValue
 
-        evaluateSection : ( Code, ParsedSection ) -> ( Section, Maybe ( FunctionName, Function ) )
+        evaluateSection : ( Code, ParsedSection ) -> ( Section, Maybe ( FunctionName, Function ), Maybe ( FunctionName, Constant ) )
         evaluateSection sectionResult =
             sectionFromParsed maybeEnv sectionResult
 
@@ -586,12 +635,12 @@ evaluateSections source maybeEnv =
         parsedSections =
             parseSections source
 
-        ( evaluatedSections, functions ) =
+        ( evaluatedSections, functions, constants ) =
             parsedSections
                 |> List.foldr
-                    (\item ( list, currentFunctions ) ->
+                    (\item ( list, currentFunctions, currentConstants ) ->
                         let
-                            ( value, maybeFunction ) =
+                            ( value, maybeFunction, maybeConstant ) =
                                 evaluateSection item
 
                             newFunctions : IdDict FunctionName Function
@@ -602,19 +651,31 @@ evaluateSections source maybeEnv =
 
                                     Nothing ->
                                         currentFunctions
+
+                            newConstants : IdDict FunctionName Constant
+                            newConstants =
+                                case maybeConstant of
+                                    Just ( name, constant ) ->
+                                        IdDict.insert name constant currentConstants
+
+                                    Nothing ->
+                                        currentConstants
                         in
-                        ( value :: list, newFunctions )
+                        ( value :: list, newFunctions, newConstants )
                     )
-                    ( [], IdDict.empty (\(FunctionName functionName) -> functionName) )
+                    ( []
+                    , IdDict.empty (\(FunctionName functionName) -> functionName)
+                    , IdDict.empty (\(FunctionName functionName) -> functionName)
+                    )
 
         --parsedSections |> List.map evaluateSection
     in
     case viewersError of
         Just error ->
-            ( viewers, ErrorSection [ OutputError "\"viewers\" failed to evaluate:", error ] :: evaluatedSections, functions )
+            ( viewers, ErrorSection [ OutputError "\"viewers\" failed to evaluate:", error ] :: evaluatedSections, ( functions, constants ) )
 
         Nothing ->
-            ( viewers, evaluatedSections, functions )
+            ( viewers, evaluatedSections, ( functions, constants ) )
 
 
 makeHostViewers : Result x Env -> List (Value -> Maybe (Html.Html never))
@@ -639,7 +700,7 @@ makeFile (FullCode source) =
     Result.mapError ParsingError file
 
 
-sectionFromParsed : Result Error Env -> ( Code, Result error (List Cell) ) -> ( Section, Maybe ( FunctionName, Function ) )
+sectionFromParsed : Result Error Env -> ( Code, Result error (List Cell) ) -> ( Section, Maybe ( FunctionName, Function ), Maybe ( FunctionName, Constant ) )
 sectionFromParsed maybeEnv ( source, parsedSection ) =
     case parsedSection of
         Ok cells ->
@@ -680,7 +741,7 @@ sectionFromParsed maybeEnv ( source, parsedSection ) =
                     in
                     case evaluated of
                         Err error ->
-                            ( EvaluatedSection source (Err error), Nothing )
+                            ( EvaluatedSection source (Err error), Nothing, Nothing )
 
                         Ok (PartiallyApplied ((PartiallyAppliedFunction _ alreadyApplied patterns _ _) as function)) ->
                             let
@@ -690,7 +751,7 @@ sectionFromParsed maybeEnv ( source, parsedSection ) =
                             in
                             case maybePairs of
                                 Err error ->
-                                    ( EvaluatedSection source (Err error), Nothing )
+                                    ( EvaluatedSection source (Err error), Nothing, Nothing )
 
                                 Ok ( pairs, return ) ->
                                     ( InteractiveSection source functionName
@@ -702,10 +763,18 @@ sectionFromParsed maybeEnv ( source, parsedSection ) =
                                           , return = return
                                           }
                                         )
+                                    , Nothing
                                     )
 
                         Ok value ->
-                            ( EvaluatedSection source (value |> OutputValue |> Ok), Nothing )
+                            ( EvaluatedSection source (value |> OutputValue |> Ok)
+                            , Nothing
+                            , declarationTypeAnnotation declaration
+                                |> Result.map bigAnnotationToList
+                                |> Result.andThen parseReturnType
+                                |> Result.toMaybe
+                                |> Maybe.map (\typeName -> ( functionName, Types.Constant typeName ))
+                            )
 
                 _ ->
                     ( List.filter isComment cells
@@ -730,13 +799,70 @@ sectionFromParsed maybeEnv ( source, parsedSection ) =
                         |> Markdown
                         |> MarkdownSection
                     , Nothing
+                    , Nothing
                     )
 
         Err _ ->
-            ( CodeSection source, Nothing )
+            ( CodeSection source, Nothing, Nothing )
 
 
 
+--returnTypeFromValue : Value -> TypeName
+--returnTypeFromValue value =
+--    case value of
+--        String _ ->
+--            TypeName "String"
+--        Int _ ->
+--            TypeName "Int"
+--
+--        Float _ ->
+--            TypeName "Float"
+--
+--        Char _ ->
+--            TypeName "Char"
+--
+--
+--        Bool _ ->
+--            TypeName "Bool"
+--
+--
+--        Unit ->
+--            TypeName "Unit"
+--
+--
+--        Tuple first second ->
+--            let
+--                TypeName firstName = returnTypeFromValue first
+--                TypeName secondName = returnTypeFromValue second
+--            in
+--            TypeName ("(" ++ firstName ++ ", " ++ secondName ++ ")")
+--
+--
+--        Triple first second third ->
+--            let
+--                TypeName firstName = returnTypeFromValue first
+--                TypeName secondName = returnTypeFromValue second
+--                TypeName thirdName = returnTypeFromValue third
+--            in
+--            TypeName ("(" ++ firstName ++ ", " ++ secondName ++ "," ++ thirdName ++ ")")
+--
+--
+--        Record _ -> TypeName "{..}"
+--
+--
+--        Custom _ _ _ -> TypeName "unknown"
+--
+--
+--        PartiallyApplied _ -> TypeName "unknown"
+--
+--
+--        JsArray _ -> TypeName "unknown"
+--
+--
+--        List list ->
+--            let
+--            TypeName itemName = returnTypeFromValue
+--        TypeName "unknown"
 -- EVALUATION
 
 
@@ -885,6 +1011,14 @@ evaluate maybeEnv expressionNode =
 -- PARSE TOGETHER
 
 
+parseReturnType : List TypeAnnotation -> Result OutputError TypeName
+parseReturnType ann =
+    List.Extra.last ann
+        |> Result.fromMaybe (OutputError "No last part of annotation")
+        |> Result.map annotationToString
+        |> Result.map TypeName
+
+
 parseTogether : List Pattern -> Declaration -> Int -> Result OutputError ( List ( ParameterName, TypeName ), TypeName )
 parseTogether patterns declaration numApplied =
     declarationTypeAnnotation declaration
@@ -896,10 +1030,7 @@ parseTogether patterns declaration numApplied =
                     |> Result.map List.concat
                     |> Result.andThen
                         (\list ->
-                            List.Extra.last ann
-                                |> Result.fromMaybe (OutputError "No last part of annotation")
-                                |> Result.map annotationToString
-                                |> Result.map TypeName
+                            parseReturnType ann
                                 |> Result.map (\returnType -> ( list, returnType ))
                         )
             )
@@ -1155,7 +1286,7 @@ view model =
                     ++ (model.source
                             |> Maybe.map List.singleton
                             |> Maybe.withDefault []
-                            |> List.map (\source -> viewCode (Code (getHostText source model.functions)))
+                            |> List.map (\source -> viewCode (Code (getHostText source model.functions model.constants)))
                        )
                     ++ (case ( model.source, model.currentFileName, model.error ) of
                             ( Just _, _, _ ) ->

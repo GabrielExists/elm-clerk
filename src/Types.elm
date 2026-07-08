@@ -25,11 +25,16 @@ type alias FrontendModel =
     , interactives : Interactives
     , reloadRequests : IdDict FunctionName Int
     , functions : IdDict FunctionName Function
+    , constants : IdDict FunctionName Constant
     , viewers : List Viewer
     , hostViewers : List HostViewer
     , outputs : IdDict FunctionName Output
     , runOnHost : Bool
     }
+
+
+type Constant
+    = Constant TypeName
 
 
 type alias BackendModel =
