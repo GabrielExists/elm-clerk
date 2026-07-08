@@ -30,7 +30,6 @@ import Elm.ToString
 import Eval.Expression
 import Eval.Module
 import FastDict as Dict exposing (Dict)
-import Gen.Kernel
 import Hash
 import Host
 import Html
@@ -420,7 +419,11 @@ getHostText fullSource functions constants =
                                                         getSelectorFromTypeName (Tuple.second pair)
                                                     )
                                              )
-                                                ++ [ Gen.Kernel.values_.to
+                                                ++ [ Elm.value
+                                                        { importFrom = [ "Kernel" ]
+                                                        , name = "to"
+                                                        , annotation = Nothing
+                                                        }
                                                    , getSelectorFromTypeName function.return
                                                    , Elm.value
                                                         { importFrom = maybeFileName
@@ -438,7 +441,12 @@ getHostText fullSource functions constants =
                                 Just <|
                                     Elm.tuple (Elm.string name)
                                         (Elm.apply
-                                            Gen.Kernel.values_.constant
+                                            (Elm.value
+                                                { importFrom = [ "Kernel" ]
+                                                , name = "constant"
+                                                , annotation = Just Elm.Annotation.int -- I need to add this somewhere in order for it to not generate an (incorrect) type signature
+                                                }
+                                            )
                                             [ getSelectorFromTypeName returnValue
                                             , Elm.value
                                                 { importFrom = maybeFileName
@@ -469,6 +477,20 @@ getHostText fullSource functions constants =
 getSelectorFromTypeName : TypeName -> Elm.Expression
 getSelectorFromTypeName (TypeName typeName) =
     case typeName of
+        "Bool" ->
+            Elm.value
+                { importFrom = [ "Kernel" ]
+                , name = "bool"
+                , annotation = Nothing
+                }
+
+        "Char" ->
+            Elm.value
+                { importFrom = [ "Kernel" ]
+                , name = "char"
+                , annotation = Nothing
+                }
+
         "Int" ->
             Elm.value
                 { importFrom = [ "Kernel" ]
@@ -476,8 +498,22 @@ getSelectorFromTypeName (TypeName typeName) =
                 , annotation = Nothing
                 }
 
+        "Float" ->
+            Elm.value
+                { importFrom = [ "Kernel" ]
+                , name = "float"
+                , annotation = Nothing
+                }
+
+        "String" ->
+            Elm.value
+                { importFrom = [ "Kernel" ]
+                , name = "string"
+                , annotation = Nothing
+                }
+
         _ ->
-            case Debug.log "removeStartsWith \"List \" typeName" (removeStartsWith "List " (Debug.log "typeName" typeName)) of
+            case removeStartsWith "List " typeName of
                 Just inner ->
                     Elm.apply
                         (Elm.value
@@ -499,41 +535,29 @@ getSelectorFromTypeName (TypeName typeName) =
 
 
 getCombinerFromNumArgs numArgs =
-    case numArgs of
-        0 ->
-            Gen.Kernel.values_.constant
+    Elm.value
+        { importFrom = [ "Kernel" ]
+        , name =
+            case numArgs of
+                0 ->
+                    "constant"
 
-        --Elm.value
-        --    { importFrom = [ "Kernel" ]
-        --    , name = "constant"
-        --    , annotation =
-        --        Elm.Annotation.function []
-        --            (Elm.Annotation.tuple Elm.Annotation.int
-        --                (Elm.Annotation.function
-        --                    [ Elm.Annotation.list (Elm.Annotation.namedWith [ "Kernel" ] "Value" []) ]
-        --                    (Elm.Annotation.namedWith [ "Kernel" ]
-        --                        "Eval"
-        --                        [ Elm.Annotation.namedWith [ "Kernel" ] "Value" [] ]
-        --                    )
-        --                )
-        --            )
-        --            |> Just
-        --    }
-        --constant : OutSelector res x -> res -> ModuleName -> String -> ( Int, List Value -> Eval Value )
-        1 ->
-            Gen.Kernel.values_.one
+                1 ->
+                    "one"
 
-        2 ->
-            Gen.Kernel.values_.two
+                2 ->
+                    "two"
 
-        3 ->
-            Gen.Kernel.values_.three
+                3 ->
+                    "three"
 
-        4 ->
-            Gen.Kernel.values_.four
+                4 ->
+                    "four"
 
-        _ ->
-            Elm.val "tooManyArguments"
+                _ ->
+                    "tooManyArguments"
+        , annotation = Just Elm.Annotation.int -- I need to add this somewhere in order for it to not generate an (incorrect) type signature
+        }
 
 
 removeStartsWith : String -> String -> Maybe String
