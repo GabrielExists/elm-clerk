@@ -27,8 +27,10 @@ import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Pattern exposing (Pattern(..))
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
 import Elm.ToString
+import Environment
 import Eval.Expression
 import Eval.Module
+import EvalResult
 import FastDict as Dict exposing (Dict)
 import Hash
 import Host
@@ -225,7 +227,7 @@ update msg model =
                 let
                     newOutput : Result OutputError OutputValue
                     newOutput =
-                        calculateOutput model.interactives model.functions functionName
+                        calculateOutput model.runOnHost model.interactives model.functions functionName
                 in
                 ( { model | outputs = IdDict.insert functionName newOutput model.outputs }, Cmd.none )
 
@@ -890,11 +892,40 @@ sectionFromParsed maybeEnv ( source, parsedSection ) =
 -- EVALUATION
 
 
-calculateOutput : Interactives -> IdDict FunctionName Function -> FunctionName -> Output
-calculateOutput interactives functions functionName =
-    case IdDict.get functionName functions of
+hostFunctionList : Dict String ( Int, List Value -> InterpreterTypes.Config -> Env -> InterpreterTypes.EvalResult Value )
+hostFunctionList =
+    Host.functionList
+        |> Dict.fromList
+
+
+calculateOutput : Bool -> Interactives -> IdDict FunctionName Function -> FunctionName -> Output
+calculateOutput runOnHost interactives functions ((FunctionName functionNameString) as functionName) =
+    case IdDict.get (Debug.log "functionName" functionName) functions of
         Just { function, declaration } ->
-            applyPartiallyApplied interactives function declaration
+            if runOnHost then
+                case Dict.get functionNameString hostFunctionList of
+                    Just ( numArgs, hostFunction ) ->
+                        let
+                            function2 : List Value -> InterpreterTypes.Config -> Env -> InterpreterTypes.EvalResult Value
+                            function2 =
+                                hostFunction
+
+                            oldArgs =
+                                []
+
+                            cfg =
+                                { trace = False }
+
+                            (PartiallyAppliedFunction env _ _ _ _) =
+                                function
+                        in
+                        applyPartiallyAppliedHost interactives function hostFunction declaration
+
+                    Nothing ->
+                        OutputError "Couldn't load function on host" |> Err
+
+            else
+                applyPartiallyApplied interactives function declaration
 
         Nothing ->
             OutputError "No function stored with this name! This is an internal error." |> Err
@@ -991,6 +1022,112 @@ applyPartiallyApplied evalInteractives partiallyApplied declaration =
                 |> Result.andThen (\env -> evaluate (Ok env) expression)
     in
     Result.map OutputValue functionOutput
+
+
+applyPartiallyAppliedHost : Interactives -> PartiallyAppliedFunction -> (List Value -> InterpreterTypes.Config -> Env -> InterpreterTypes.EvalResult Value) -> Declaration -> Output
+applyPartiallyAppliedHost evalInteractives partiallyApplied hostFunction declaration =
+    let
+        (PartiallyAppliedFunction baseEnv alreadyApplied patterns _ expression) =
+            partiallyApplied
+
+        maybePairs : Result OutputError ( List ( ParameterName, TypeName ), TypeName )
+        maybePairs =
+            parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
+
+        maybeValuePairs : Result OutputError (List ( ParameterName, Value ))
+        maybeValuePairs =
+            parseValuesTogether (patterns |> List.map Node.value) alreadyApplied
+
+        functionName : FunctionName
+        functionName =
+            extractNameFromDeclaration declaration |> FunctionName
+
+        insertIntoEnvFromValue : ( ParameterName, Value ) -> Dict String Value -> Dict String Value
+        insertIntoEnvFromValue ( ParameterName binding, value ) localValues =
+            Dict.insert binding value localValues
+
+        insertIntoEnvFromType : ( ParameterName, TypeName ) -> Dict String Value -> Result OutputError (Dict String Value)
+        insertIntoEnvFromType ( ParameterName binding, TypeName typeName ) localValues =
+            let
+                maybeTypeNode : Maybe InteractiveElement
+                maybeTypeNode =
+                    Dict.get typeName typeNodeMap
+
+                maybeRawValue : Maybe RawInteractiveValue
+                maybeRawValue =
+                    Interactives.get ( functionName, ParameterName binding ) evalInteractives
+
+                typeNodeToValue : InteractiveElement -> RawInteractiveValue -> Result OutputError Value
+                typeNodeToValue typeNode rawValue =
+                    typeNode.conversion rawValue
+
+                maybeValue : Maybe (Result OutputError Value)
+                maybeValue =
+                    Maybe.map2 typeNodeToValue maybeTypeNode maybeRawValue
+            in
+            case maybeValue of
+                Just (Ok value) ->
+                    Dict.insert binding value localValues |> Ok
+
+                _ ->
+                    ("Missing \"" ++ binding ++ "\"") |> OutputError |> Err
+
+        updateEnvFromValues : Env -> Env
+        updateEnvFromValues env =
+            case maybeValuePairs of
+                Err _ ->
+                    env
+
+                Ok pairs ->
+                    { env
+                        | values =
+                            List.foldl
+                                insertIntoEnvFromValue
+                                env.values
+                                pairs
+                    }
+
+        updateEnvFromType : Env -> Result OutputError Env
+        updateEnvFromType env =
+            case maybePairs of
+                Err _ ->
+                    Ok env
+
+                Ok pairs ->
+                    case
+                        Result.Extra.foldlWhileOk
+                            insertIntoEnvFromType
+                            env.values
+                            (Tuple.first pairs)
+                    of
+                        Ok newValues ->
+                            { env
+                                | values = newValues
+                            }
+                                |> Ok
+
+                        Err err ->
+                            Err err
+
+        functionOutput : Result OutputError Value
+        functionOutput =
+            (baseEnv |> updateEnvFromValues |> updateEnvFromType)
+                |> Result.andThen
+                    (\env ->
+                        --evaluate (Ok env) expression
+                        hostFunction alreadyApplied
+                            { trace = False }
+                            env
+                            |> EvalResult.toResult
+                            |> Result.mapError EvalError
+                            |> Result.mapError errorToString
+                            |> Result.mapError OutputError
+                    )
+
+        --(baseEnv |> updateEnvFromValues |> updateEnvFromType)
+        --    |> Result.andThen (\env -> evaluate (Ok env) expression)
+    in
+    Result.map OutputValue (Debug.log "functionOutput" functionOutput)
 
 
 evaluateName : Result Error Env -> FunctionName -> Result OutputError Value
