@@ -1,5 +1,6 @@
 module Frontend exposing (Model, app)
 
+import Boundary exposing (InteractiveElement)
 import Browser exposing (UrlRequest(..))
 import Browser.Dom
 import Browser.Navigation as Nav
@@ -418,7 +419,7 @@ getHostText fullSource functions constants =
                                             ((function.pairs
                                                 |> List.map
                                                     (\pair ->
-                                                        getSelectorFromTypeName (Tuple.second pair)
+                                                        Boundary.getSelectorFromTypeName (Tuple.second pair)
                                                     )
                                              )
                                                 ++ [ Elm.value
@@ -426,7 +427,7 @@ getHostText fullSource functions constants =
                                                         , name = "to"
                                                         , annotation = Nothing
                                                         }
-                                                   , getSelectorFromTypeName function.return
+                                                   , Boundary.getSelectorFromTypeName function.return
                                                    , Elm.value
                                                         { importFrom = maybeFileName
                                                         , name = name
@@ -449,7 +450,7 @@ getHostText fullSource functions constants =
                                                 , annotation = Just Elm.Annotation.int -- I need to add this somewhere in order for it to not generate an (incorrect) type signature
                                                 }
                                             )
-                                            [ getSelectorFromTypeName returnValue
+                                            [ Boundary.getSelectorFromTypeName returnValue
                                             , Elm.value
                                                 { importFrom = maybeFileName
                                                 , name = name
@@ -476,66 +477,6 @@ getHostText fullSource functions constants =
         |> .contents
 
 
-getSelectorFromTypeName : TypeName -> Elm.Expression
-getSelectorFromTypeName (TypeName typeName) =
-    case typeName of
-        "Bool" ->
-            Elm.value
-                { importFrom = [ "Kernel" ]
-                , name = "bool"
-                , annotation = Nothing
-                }
-
-        "Char" ->
-            Elm.value
-                { importFrom = [ "Kernel" ]
-                , name = "char"
-                , annotation = Nothing
-                }
-
-        "Int" ->
-            Elm.value
-                { importFrom = [ "Kernel" ]
-                , name = "int"
-                , annotation = Nothing
-                }
-
-        "Float" ->
-            Elm.value
-                { importFrom = [ "Kernel" ]
-                , name = "float"
-                , annotation = Nothing
-                }
-
-        "String" ->
-            Elm.value
-                { importFrom = [ "Kernel" ]
-                , name = "string"
-                , annotation = Nothing
-                }
-
-        _ ->
-            case removeStartsWith "List " typeName of
-                Just inner ->
-                    Elm.apply
-                        (Elm.value
-                            { importFrom = [ "Kernel" ]
-                            , name = "list"
-                            , annotation = Nothing
-                            }
-                        )
-                        [ getSelectorFromTypeName
-                            (TypeName inner)
-                        ]
-
-                _ ->
-                    Elm.value
-                        { importFrom = [ "Kernel" ]
-                        , name = "unknown"
-                        , annotation = Nothing
-                        }
-
-
 getCombinerFromNumArgs numArgs =
     Elm.value
         { importFrom = [ "Kernel" ]
@@ -560,15 +501,6 @@ getCombinerFromNumArgs numArgs =
                     "tooManyArguments"
         , annotation = Just Elm.Annotation.int -- I need to add this somewhere in order for it to not generate an (incorrect) type signature
         }
-
-
-removeStartsWith : String -> String -> Maybe String
-removeStartsWith needle haystack =
-    if String.startsWith needle haystack then
-        Just <| String.dropLeft (String.length needle) haystack
-
-    else
-        Nothing
 
 
 
@@ -773,7 +705,7 @@ sectionFromParsed maybeEnv ( source, parsedSection ) =
                             let
                                 maybePairs : Result OutputError ( List ( ParameterName, TypeName ), TypeName )
                                 maybePairs =
-                                    parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
+                                    Boundary.parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
                             in
                             case maybePairs of
                                 Err error ->
@@ -795,9 +727,9 @@ sectionFromParsed maybeEnv ( source, parsedSection ) =
                         Ok value ->
                             ( EvaluatedSection source (value |> OutputValue |> Ok)
                             , Nothing
-                            , declarationTypeAnnotation declaration
-                                |> Result.map bigAnnotationToList
-                                |> Result.andThen parseReturnType
+                            , Boundary.declarationTypeAnnotation declaration
+                                |> Result.map Boundary.bigAnnotationToList
+                                |> Result.andThen Boundary.parseReturnType
                                 |> Result.toMaybe
                                 |> Maybe.map (\typeName -> ( functionName, Types.Constant typeName ))
                             )
@@ -939,11 +871,11 @@ applyPartiallyApplied evalInteractives partiallyApplied declaration =
 
         maybePairs : Result OutputError ( List ( ParameterName, TypeName ), TypeName )
         maybePairs =
-            parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
+            Boundary.parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
 
         maybeValuePairs : Result OutputError (List ( ParameterName, Value ))
         maybeValuePairs =
-            parseValuesTogether (patterns |> List.map Node.value) alreadyApplied
+            Boundary.parseValuesTogether (patterns |> List.map Node.value) alreadyApplied
 
         functionName : FunctionName
         functionName =
@@ -958,7 +890,7 @@ applyPartiallyApplied evalInteractives partiallyApplied declaration =
             let
                 maybeTypeNode : Maybe InteractiveElement
                 maybeTypeNode =
-                    Dict.get typeName typeNodeMap
+                    Dict.get typeName Boundary.typeNodeMap
 
                 maybeRawValue : Maybe RawInteractiveValue
                 maybeRawValue =
@@ -1032,11 +964,11 @@ applyPartiallyAppliedHost evalInteractives partiallyApplied hostFunction declara
 
         maybePairs : Result OutputError ( List ( ParameterName, TypeName ), TypeName )
         maybePairs =
-            parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
+            Boundary.parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
 
         maybeValuePairs : Result OutputError (List ( ParameterName, Value ))
         maybeValuePairs =
-            parseValuesTogether (patterns |> List.map Node.value) alreadyApplied
+            Boundary.parseValuesTogether (patterns |> List.map Node.value) alreadyApplied
 
         functionName : FunctionName
         functionName =
@@ -1051,7 +983,7 @@ applyPartiallyAppliedHost evalInteractives partiallyApplied hostFunction declara
             let
                 maybeTypeNode : Maybe InteractiveElement
                 maybeTypeNode =
-                    Dict.get typeName typeNodeMap
+                    Dict.get typeName Boundary.typeNodeMap
 
                 maybeRawValue : Maybe RawInteractiveValue
                 maybeRawValue =
@@ -1169,213 +1101,7 @@ evaluate maybeEnv expressionNode =
 
 
 
--- PARSE TOGETHER
-
-
-parseReturnType : List TypeAnnotation -> Result OutputError TypeName
-parseReturnType ann =
-    List.Extra.last ann
-        |> Result.fromMaybe (OutputError "No last part of annotation")
-        |> Result.map annotationToString
-        |> Result.map TypeName
-
-
-parseTogether : List Pattern -> Declaration -> Int -> Result OutputError ( List ( ParameterName, TypeName ), TypeName )
-parseTogether patterns declaration numApplied =
-    declarationTypeAnnotation declaration
-        |> Result.map bigAnnotationToList
-        |> Result.andThen
-            (\ann ->
-                List.map2 Tuple.pair (List.drop numApplied patterns) ann
-                    |> Result.Extra.combineMap parseTogetherSingle
-                    |> Result.map List.concat
-                    |> Result.andThen
-                        (\list ->
-                            parseReturnType ann
-                                |> Result.map (\returnType -> ( list, returnType ))
-                        )
-            )
-
-
-parseTogetherSingle : ( Pattern, TypeAnnotation ) -> Result OutputError (List ( ParameterName, TypeName ))
-parseTogetherSingle ( pattern, annotation ) =
-    case ( pattern, annotation ) of
-        ( TuplePattern patterns, TypeAnnotation.Tupled annotations ) ->
-            List.map2 Tuple.pair (patterns |> List.map Node.value) (annotations |> List.map Node.value)
-                |> Result.Extra.combineMap parseTogetherSingle
-                |> Result.map List.concat
-
-        --( RecordPattern patterns, TypeAnnotation.Record record ) ->
-        --    Err "record not implemented"
-        --(UnConsPattern head rest, TypeAnnotation. )->
-        --ListPattern (List (Node Pattern))
-        --VarPattern String
-        ( VarPattern binding, TypeAnnotation.Typed moduleNode patterns ) ->
-            let
-                typeName : String
-                typeName =
-                    moduleNode
-                        |> Node.value
-                        |> (\( moduleName, name ) -> moduleName ++ [ name ])
-                        |> String.join "."
-
-                fullTypeName : String
-                fullTypeName =
-                    typeName
-                        :: (patterns
-                                |> List.map Node.value
-                                |> List.map annotationToString
-                           )
-                        |> String.join " "
-            in
-            Ok [ ( ParameterName binding, TypeName fullTypeName ) ]
-
-        --NamedPattern QualifiedNameRef (List (Node Pattern))
-        --AsPattern (Node Pattern) (Node String)
-        --ParenthesizedPattern (Node Pattern)
-        ( p, a ) ->
-            Err (OutputError ("Can't handle variables of type " ++ (a |> annotationToString) ++ " with binding " ++ (p |> patternToString)))
-
-
-parseValuesTogether : List Pattern -> List Value -> Result OutputError (List ( ParameterName, Value ))
-parseValuesTogether patterns alreadyApplied =
-    List.map2 Tuple.pair patterns alreadyApplied
-        |> Result.Extra.combineMap parseValuesTogetherSingle
-        |> Result.map List.concat
-
-
-parseValuesTogetherSingle : ( Pattern, Value ) -> Result OutputError (List ( ParameterName, Value ))
-parseValuesTogetherSingle ( pattern, rootValue ) =
-    case ( pattern, rootValue ) of
-        ( TuplePattern [ firstBinding, secondBinding ], Tuple first second ) ->
-            [ ( Node.value firstBinding, first ), ( Node.value secondBinding, second ) ]
-                |> Result.Extra.combineMap parseValuesTogetherSingle
-                |> Result.map List.concat
-
-        ( VarPattern binding, value ) ->
-            Ok [ ( ParameterName binding, value ) ]
-
-        ( p, v ) ->
-            Err (OutputError ("Can't apply variables with value " ++ (v |> Value.toString) ++ " with binding " ++ (p |> patternToString)))
-
-
-
--- INTERACTIVE
-
-
-typeNodeMap : Dict String InteractiveElement
-typeNodeMap =
-    [ interactiveElementInt
-    , interactiveElementChar
-    , interactiveElementString
-    ]
-        |> List.map
-            (\x ->
-                ( let
-                    (TypeName key) =
-                        x.key
-                  in
-                  key
-                , x
-                )
-            )
-        |> Dict.fromList
-
-
-type alias InteractiveElement =
-    { key : TypeName
-    , conversion : RawInteractiveValue -> Result OutputError Value
-    , element : FunctionName -> ParameterName -> Maybe RawInteractiveValue -> Element FrontendMsg
-    }
-
-
-interactiveElementInt : InteractiveElement
-interactiveElementInt =
-    let
-        conversion : RawInteractiveValue -> Result OutputError Value
-        conversion (RawInteractiveValue text) =
-            text
-                |> String.toInt
-                |> Result.fromMaybe "Couldn't parse!"
-                |> Result.map Kernel.int.toValue
-                |> Result.mapError OutputError
-    in
-    { key = TypeName "Int"
-    , conversion = conversion
-    , element = viewTextInput "Int"
-    }
-
-
-interactiveElementChar : InteractiveElement
-interactiveElementChar =
-    let
-        conversion : RawInteractiveValue -> Result OutputError Value
-        conversion (RawInteractiveValue text) =
-            (if String.length text == 1 then
-                String.toList text |> List.head
-
-             else
-                Nothing
-            )
-                |> Result.fromMaybe "Not exactly one character"
-                |> Result.map Kernel.char.toValue
-                |> Result.mapError OutputError
-    in
-    { key = TypeName "Char"
-    , conversion = conversion
-    , element = viewTextInput "Char"
-    }
-
-
-interactiveElementString : InteractiveElement
-interactiveElementString =
-    let
-        conversion : RawInteractiveValue -> Result OutputError Value
-        conversion (RawInteractiveValue text) =
-            text
-                |> Kernel.string.toValue
-                |> Ok
-    in
-    { key = TypeName "String"
-    , conversion = conversion
-    , element = viewTextInput "String"
-    }
-
-
-
 -- UTILITIES
-
-
-bigAnnotationToList : TypeAnnotation -> List TypeAnnotation
-bigAnnotationToList annotation =
-    case annotation of
-        TypeAnnotation.FunctionTypeAnnotation first second ->
-            (first
-                |> Node.value
-            )
-                :: (second
-                        |> Node.value
-                        |> bigAnnotationToList
-                   )
-
-        other ->
-            [ other ]
-
-
-declarationTypeAnnotation : Declaration -> Result OutputError TypeAnnotation
-declarationTypeAnnotation declaration =
-    case declaration of
-        FunctionDeclaration function ->
-            function
-                |> .signature
-                |> Maybe.map Ok
-                |> Maybe.withDefault (Err (OutputError "No type annotations found."))
-                |> Result.map Node.value
-                |> Result.map .typeAnnotation
-                |> Result.map Node.value
-
-        _ ->
-            Err (OutputError "Not a function declaration")
 
 
 extractNameFromDeclaration : Declaration -> String
@@ -1643,7 +1369,7 @@ viewInteractive interactives functionName ( (ParameterName bindingString) as bin
         maybeValue =
             Interactives.get ( functionName, binding ) interactives
     in
-    case Dict.get typeName typeNodeMap of
+    case Dict.get typeName Boundary.typeNodeMap of
         Nothing ->
             viewOutputError (OutputError (bindingString ++ " - Interactive input of \"" ++ typeName ++ "\" not supported"))
 
@@ -1798,26 +1524,6 @@ viewOutput output =
                 , Element.htmlAttribute (Html.Attributes.style "word-break" "break-word")
                 ]
                 (paragraph [ monospace, Font.size 20 ] [ text output ])
-
-
-viewTextInput : String -> FunctionName -> ParameterName -> Maybe RawInteractiveValue -> Element FrontendMsg
-viewTextInput typeName functionName (ParameterName parameterName) maybeRawValue =
-    let
-        maybeValue : Maybe String
-        maybeValue =
-            maybeRawValue |> Maybe.map (\(RawInteractiveValue x) -> x)
-    in
-    Element.row [ Element.padding 6 ]
-        [ Element.Input.text
-            []
-            { onChange = \x -> InteractiveUpdated ( functionName, ParameterName parameterName ) (RawInteractiveValue x)
-            , text = Maybe.withDefault "" maybeValue
-            , placeholder = Nothing
-            , label =
-                Element.Input.labelAbove [ monospace, Font.size 16, Element.paddingXY 6 0 ]
-                    (Element.text (parameterName ++ " : " ++ typeName ++ " = " ++ Maybe.withDefault "" maybeValue))
-            }
-        ]
 
 
 defaultPadding : { top : Int, right : Int, bottom : Int, left : Int }
