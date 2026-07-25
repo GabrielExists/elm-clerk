@@ -15,7 +15,6 @@ CLEARED_CONTENTS = """module Host exposing (..)
 import InterpreterTypes exposing (Eval, Value)
 
 
-functionList : List ( String, ( Int, List Value -> Eval Value ) )
 functionList =
     []
 

@@ -99,7 +99,7 @@ init _ key =
       , hostViewers = []
       , outputs = IdDict.empty (\(FunctionName functionName) -> functionName)
       , reloadRequests = IdDict.empty (\(FunctionName functionName) -> functionName)
-      , runOnHost = False
+      , runOnHost = True
       }
     , Cmd.batch
         [ Http.get
@@ -433,9 +433,6 @@ getHostText fullSource functions constants =
                                                         , name = name
                                                         , annotation = Nothing
                                                         }
-                                                   , Elm.list
-                                                        (List.map Elm.string maybeFileName)
-                                                   , Elm.string name
                                                    ]
                                             )
                                         )
@@ -445,7 +442,7 @@ getHostText fullSource functions constants =
                                     Elm.tuple (Elm.string name)
                                         (Elm.apply
                                             (Elm.value
-                                                { importFrom = [ "Kernel" ]
+                                                { importFrom = [ "HostFunctions" ]
                                                 , name = "constant"
                                                 , annotation = Just Elm.Annotation.int -- I need to add this somewhere in order for it to not generate an (incorrect) type signature
                                                 }
@@ -456,9 +453,6 @@ getHostText fullSource functions constants =
                                                 , name = name
                                                 , annotation = Nothing
                                                 }
-                                            , Elm.list
-                                                (List.map Elm.string maybeFileName)
-                                            , Elm.string name
                                             ]
                                         )
 
@@ -479,7 +473,7 @@ getHostText fullSource functions constants =
 
 getCombinerFromNumArgs numArgs =
     Elm.value
-        { importFrom = [ "Kernel" ]
+        { importFrom = [ "HostFunctions" ]
         , name =
             case numArgs of
                 0 ->
@@ -824,7 +818,7 @@ sectionFromParsed maybeEnv ( source, parsedSection ) =
 -- EVALUATION
 
 
-hostFunctionList : Dict String ( Int, List Value -> InterpreterTypes.Config -> Env -> InterpreterTypes.EvalResult Value )
+hostFunctionList : Dict String (List Value -> Output)
 hostFunctionList =
     Host.functionList
         |> Dict.fromList
@@ -832,14 +826,20 @@ hostFunctionList =
 
 calculateOutput : Bool -> Interactives -> IdDict FunctionName Function -> FunctionName -> Output
 calculateOutput runOnHost interactives functions ((FunctionName functionNameString) as functionName) =
-    case IdDict.get (Debug.log "functionName" functionName) functions of
+    case IdDict.get functionName functions of
         Just { function, declaration } ->
-            if runOnHost then
+            if not runOnHost then
+                applyPartiallyApplied interactives function declaration
+
+            else
                 case Dict.get functionNameString hostFunctionList of
-                    Just ( numArgs, hostFunction ) ->
+                    Just hostFunction ->
                         let
-                            function2 : List Value -> InterpreterTypes.Config -> Env -> InterpreterTypes.EvalResult Value
+                            function2 : List Value -> Output
                             function2 =
+                                hostFunction
+
+                            result =
                                 hostFunction
 
                             oldArgs =
@@ -848,16 +848,13 @@ calculateOutput runOnHost interactives functions ((FunctionName functionNameStri
                             cfg =
                                 { trace = False }
 
-                            (PartiallyAppliedFunction env _ _ _ _) =
-                                function
+                            --(PartiallyAppliedFunction env _ _ _ _) =
+                            --    function
                         in
-                        applyPartiallyAppliedHost interactives function hostFunction declaration
+                        applyPartiallyAppliedHost interactives hostFunction function functionName declaration
 
                     Nothing ->
                         OutputError "Couldn't load function on host" |> Err
-
-            else
-                applyPartiallyApplied interactives function declaration
 
         Nothing ->
             OutputError "No function stored with this name! This is an internal error." |> Err
@@ -956,23 +953,15 @@ applyPartiallyApplied evalInteractives partiallyApplied declaration =
     Result.map OutputValue functionOutput
 
 
-applyPartiallyAppliedHost : Interactives -> PartiallyAppliedFunction -> (List Value -> InterpreterTypes.Config -> Env -> InterpreterTypes.EvalResult Value) -> Declaration -> Output
-applyPartiallyAppliedHost evalInteractives partiallyApplied hostFunction declaration =
+applyPartiallyAppliedHost : Interactives -> (List Value -> Output) -> PartiallyAppliedFunction -> FunctionName -> Declaration -> Output
+applyPartiallyAppliedHost interactives hostFunction partiallyApplied functionName declaration =
     let
-        (PartiallyAppliedFunction baseEnv alreadyApplied patterns _ expression) =
+        (PartiallyAppliedFunction _ _ patterns _ _) =
             partiallyApplied
 
         maybePairs : Result OutputError ( List ( ParameterName, TypeName ), TypeName )
         maybePairs =
-            Boundary.parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
-
-        maybeValuePairs : Result OutputError (List ( ParameterName, Value ))
-        maybeValuePairs =
-            Boundary.parseValuesTogether (patterns |> List.map Node.value) alreadyApplied
-
-        functionName : FunctionName
-        functionName =
-            extractNameFromDeclaration declaration |> FunctionName
+            Boundary.parseTogether (patterns |> List.map Node.value) declaration 0
 
         insertIntoEnvFromValue : ( ParameterName, Value ) -> Dict String Value -> Dict String Value
         insertIntoEnvFromValue ( ParameterName binding, value ) localValues =
@@ -987,7 +976,7 @@ applyPartiallyAppliedHost evalInteractives partiallyApplied hostFunction declara
 
                 maybeRawValue : Maybe RawInteractiveValue
                 maybeRawValue =
-                    Interactives.get ( functionName, ParameterName binding ) evalInteractives
+                    Interactives.get ( functionName, ParameterName binding ) interactives
 
                 typeNodeToValue : InteractiveElement -> RawInteractiveValue -> Result OutputError Value
                 typeNodeToValue typeNode rawValue =
@@ -1004,62 +993,28 @@ applyPartiallyAppliedHost evalInteractives partiallyApplied hostFunction declara
                 _ ->
                     ("Missing \"" ++ binding ++ "\"") |> OutputError |> Err
 
-        updateEnvFromValues : Env -> Env
-        updateEnvFromValues env =
-            case maybeValuePairs of
-                Err _ ->
-                    env
+        find : ( ParameterName, TypeName ) -> Result OutputError Value
+        find ( (ParameterName parameterNameString) as parameterName, TypeName typeName ) =
+            let
+                maybeTypeNode : Result OutputError InteractiveElement
+                maybeTypeNode =
+                    Dict.get typeName Boundary.typeNodeMap |> Result.fromMaybe (OutputError "No matching type node")
 
-                Ok pairs ->
-                    { env
-                        | values =
-                            List.foldl
-                                insertIntoEnvFromValue
-                                env.values
-                                pairs
-                    }
+                maybeRawValue : Result OutputError RawInteractiveValue
+                maybeRawValue =
+                    Interactives.get ( functionName, parameterName ) interactives |> Result.fromMaybe (OutputError "No rawvalue in interactives")
+            in
+            Result.map2 Tuple.pair maybeTypeNode maybeRawValue
+                |> Result.andThen (\( typeNode, rawValue ) -> typeNode.conversion rawValue)
 
-        updateEnvFromType : Env -> Result OutputError Env
-        updateEnvFromType env =
-            case maybePairs of
-                Err _ ->
-                    Ok env
-
-                Ok pairs ->
-                    case
-                        Result.Extra.foldlWhileOk
-                            insertIntoEnvFromType
-                            env.values
-                            (Tuple.first pairs)
-                    of
-                        Ok newValues ->
-                            { env
-                                | values = newValues
-                            }
-                                |> Ok
-
-                        Err err ->
-                            Err err
-
-        functionOutput : Result OutputError Value
-        functionOutput =
-            (baseEnv |> updateEnvFromValues |> updateEnvFromType)
-                |> Result.andThen
-                    (\env ->
-                        --evaluate (Ok env) expression
-                        hostFunction alreadyApplied
-                            { trace = False }
-                            env
-                            |> EvalResult.toResult
-                            |> Result.mapError EvalError
-                            |> Result.mapError errorToString
-                            |> Result.mapError OutputError
-                    )
+        parameters : Result OutputError (List Value)
+        parameters =
+            maybePairs |> Result.andThen (\( list, return ) -> Result.Extra.combineMap find list)
 
         --(baseEnv |> updateEnvFromValues |> updateEnvFromType)
         --    |> Result.andThen (\env -> evaluate (Ok env) expression)
     in
-    Result.map OutputValue (Debug.log "functionOutput" functionOutput)
+    Result.andThen hostFunction parameters
 
 
 evaluateName : Result Error Env -> FunctionName -> Result OutputError Value
