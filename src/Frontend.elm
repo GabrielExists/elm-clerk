@@ -1,6 +1,6 @@
 module Frontend exposing (Model, app)
 
-import Boundary exposing (InteractiveElement)
+import Boundary exposing (InteractiveElement, declarationTypeAnnotation)
 import Browser exposing (UrlRequest(..))
 import Browser.Dom
 import Browser.Navigation as Nav
@@ -514,7 +514,7 @@ evaluateFullSource source model =
                 |> Result.andThen Eval.Module.buildInitialEnv
 
         ( viewers, sections, ( functions, constants ) ) =
-            evaluateSections source maybeEnv
+            evaluateSections model.runOnHost source maybeEnv
     in
     { model
         | source = Just source
@@ -526,8 +526,8 @@ evaluateFullSource source model =
     }
 
 
-evaluateSections : FullCode -> Result Error Env -> ( List Viewer, List Section, ( IdDict FunctionName Types.Function, IdDict FunctionName Types.Constant ) )
-evaluateSections source maybeEnv =
+evaluateSections : Bool -> FullCode -> Result Error Env -> ( List Viewer, List Section, ( IdDict FunctionName Types.Function, IdDict FunctionName Types.Constant ) )
+evaluateSections runOnHost source maybeEnv =
     let
         viewerSelector : Kernel.InSelector (List (Value -> InterpreterTypes.Config -> Env -> InterpreterTypes.EvalResult (Maybe Kernel.Html.Html))) {}
         viewerSelector =
@@ -563,10 +563,6 @@ evaluateSections source maybeEnv =
                 |> Maybe.withDefault []
                 |> List.map transformValue
 
-        evaluateSection : ( Code, ParsedSection ) -> ( Section, Maybe ( FunctionName, Function ), Maybe ( FunctionName, Constant ) )
-        evaluateSection sectionResult =
-            sectionFromParsed maybeEnv sectionResult
-
         viewersError : Maybe OutputError
         viewersError =
             case viewersValue of
@@ -583,17 +579,13 @@ evaluateSections source maybeEnv =
                     else
                         Just (OutputError error)
 
-        parsedSections : List ( Code, ParsedSection )
-        parsedSections =
-            parseSections source
-
         ( evaluatedSections, functions, constants ) =
-            parsedSections
+            parseSections source
                 |> List.foldr
                     (\item ( list, currentFunctions, currentConstants ) ->
                         let
                             ( value, maybeFunction, maybeConstant ) =
-                                evaluateSection item
+                                evaluateSection runOnHost maybeEnv item
 
                             newFunctions : IdDict FunctionName Function
                             newFunctions =
@@ -619,8 +611,6 @@ evaluateSections source maybeEnv =
                     , IdDict.empty (\(FunctionName functionName) -> functionName)
                     , IdDict.empty (\(FunctionName functionName) -> functionName)
                     )
-
-        --parsedSections |> List.map evaluateSection
     in
     case viewersError of
         Just error ->
@@ -630,30 +620,8 @@ evaluateSections source maybeEnv =
             ( viewers, evaluatedSections, ( functions, constants ) )
 
 
-makeHostViewers : Result x Env -> List (Value -> Maybe (Html.Html never))
-makeHostViewers maybeEnv =
-    let
-        moduleName : String
-        moduleName =
-            String.join "" (Result.withDefault [] (Result.map .currentModule maybeEnv))
-    in
-    Dict.fromList Viewers.viewers
-        |> Dict.get moduleName
-        |> Maybe.withDefault []
-
-
-makeFile : FullCode -> Result Error File
-makeFile (FullCode source) =
-    let
-        file : Result (List DeadEnd) File
-        file =
-            Elm.Parser.parseToFile source
-    in
-    Result.mapError ParsingError file
-
-
-sectionFromParsed : Result Error Env -> ( Code, Result error (List Cell) ) -> ( Section, Maybe ( FunctionName, Function ), Maybe ( FunctionName, Constant ) )
-sectionFromParsed maybeEnv ( source, parsedSection ) =
+evaluateSection : Bool -> Result Error Env -> ( Code, Result error (List Cell) ) -> ( Section, Maybe ( FunctionName, Function ), Maybe ( FunctionName, Constant ) )
+evaluateSection runOnHost maybeEnv ( source, parsedSection ) =
     case parsedSection of
         Ok cells ->
             let
@@ -683,50 +651,72 @@ sectionFromParsed maybeEnv ( source, parsedSection ) =
             case lastCode of
                 Just (CellDeclaration (Node _ declaration)) ->
                     let
+                        patterns2 =
+                            extractPatternFromDeclaration declaration
+
+                        typeAnnotations : List TypeAnnotation
+                        typeAnnotations =
+                            declarationTypeAnnotation declaration |> Result.map Boundary.bigAnnotationToList |> Result.withDefault []
+
+                        --maybePairs2 =
+                        --    Boundary.parseTogether (patterns2 |> List.map Node.value) declaration List.length
+                        --
+                        --a =
+                        --    Boundary.parseTogether
+                        functionNameString : String
+                        functionNameString =
+                            extractNameFromDeclaration declaration
+
                         functionName : FunctionName
                         functionName =
-                            extractNameFromDeclaration declaration |> FunctionName
-
-                        evaluated : Result OutputError Value
-                        evaluated =
-                            evaluateName maybeEnv functionName
+                            functionNameString |> FunctionName
                     in
-                    case evaluated of
-                        Err error ->
-                            ( EvaluatedSection source (Err error), Nothing, Nothing )
+                    if (List.length typeAnnotations <= 1) && runOnHost then
+                        ( EvaluatedSection source
+                            (case Dict.get functionNameString hostFunctionList of
+                                Just hostFunction ->
+                                    hostFunction []
 
-                        Ok (PartiallyApplied ((PartiallyAppliedFunction _ alreadyApplied patterns _ _) as function)) ->
-                            let
-                                maybePairs : Result OutputError ( List ( ParameterName, TypeName ), TypeName )
-                                maybePairs =
-                                    Boundary.parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
-                            in
-                            case maybePairs of
-                                Err error ->
-                                    ( EvaluatedSection source (Err error), Nothing, Nothing )
-
-                                Ok ( pairs, return ) ->
-                                    ( InteractiveSection source functionName
-                                    , Just
-                                        ( functionName
-                                        , { function = function
-                                          , declaration = declaration
-                                          , pairs = pairs
-                                          , return = return
-                                          }
-                                        )
-                                    , Nothing
-                                    )
-
-                        Ok value ->
-                            ( EvaluatedSection source (value |> OutputValue |> Ok)
-                            , Nothing
-                            , Boundary.declarationTypeAnnotation declaration
-                                |> Result.map Boundary.bigAnnotationToList
-                                |> Result.andThen Boundary.parseReturnType
-                                |> Result.toMaybe
-                                |> Maybe.map (\typeName -> ( functionName, Types.Constant typeName ))
+                                Nothing ->
+                                    Err (OutputError "Host functions not yet written to file, because this constant was not found.")
                             )
+                        , Nothing
+                        , makeConstant functionName declaration
+                        )
+
+                    else
+                        case evaluateName maybeEnv functionName of
+                            Err error ->
+                                ( EvaluatedSection source (Err error), Nothing, Nothing )
+
+                            Ok (PartiallyApplied ((PartiallyAppliedFunction _ alreadyApplied patterns _ _) as function)) ->
+                                let
+                                    maybePairs : Result OutputError ( List ( ParameterName, TypeName ), TypeName )
+                                    maybePairs =
+                                        Boundary.parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
+                                in
+                                case maybePairs of
+                                    Err error ->
+                                        ( EvaluatedSection source (Err error), Nothing, Nothing )
+
+                                    Ok ( pairs, return ) ->
+                                        ( InteractiveSection source functionName
+                                        , Just
+                                            ( functionName
+                                            , { function = function
+                                              , declaration = declaration
+                                              , pairs = pairs
+                                              , return = return
+                                              }
+                                            )
+                                        , Nothing
+                                        )
+
+                            Ok value ->
+                                ( EvaluatedSection source (value |> OutputValue |> Ok)
+                                , Nothing
+                                , makeConstant functionName declaration
+                                )
 
                 _ ->
                     ( List.filter isComment cells
@@ -756,6 +746,36 @@ sectionFromParsed maybeEnv ( source, parsedSection ) =
 
         Err _ ->
             ( CodeSection source, Nothing, Nothing )
+
+
+makeConstant functionName declaration =
+    Boundary.declarationTypeAnnotation declaration
+        |> Result.map Boundary.bigAnnotationToList
+        |> Result.andThen Boundary.parseReturnType
+        |> Result.toMaybe
+        |> Maybe.map (\typeName -> ( functionName, Types.Constant typeName ))
+
+
+makeHostViewers : Result x Env -> List (Value -> Maybe (Html.Html never))
+makeHostViewers maybeEnv =
+    let
+        moduleName : String
+        moduleName =
+            String.join "" (Result.withDefault [] (Result.map .currentModule maybeEnv))
+    in
+    Dict.fromList Viewers.viewers
+        |> Dict.get moduleName
+        |> Maybe.withDefault []
+
+
+makeFile : FullCode -> Result Error File
+makeFile (FullCode source) =
+    let
+        file : Result (List DeadEnd) File
+        file =
+            Elm.Parser.parseToFile source
+    in
+    Result.mapError ParsingError file
 
 
 
@@ -834,24 +854,7 @@ calculateOutput runOnHost interactives functions ((FunctionName functionNameStri
             else
                 case Dict.get functionNameString hostFunctionList of
                     Just hostFunction ->
-                        let
-                            function2 : List Value -> Output
-                            function2 =
-                                hostFunction
-
-                            result =
-                                hostFunction
-
-                            oldArgs =
-                                []
-
-                            cfg =
-                                { trace = False }
-
-                            --(PartiallyAppliedFunction env _ _ _ _) =
-                            --    function
-                        in
-                        applyPartiallyAppliedHost interactives hostFunction function functionName declaration
+                        applyPartiallyAppliedHost interactives function hostFunction functionName declaration
 
                     Nothing ->
                         OutputError "Couldn't load function on host" |> Err
@@ -953,48 +956,21 @@ applyPartiallyApplied evalInteractives partiallyApplied declaration =
     Result.map OutputValue functionOutput
 
 
-applyPartiallyAppliedHost : Interactives -> (List Value -> Output) -> PartiallyAppliedFunction -> FunctionName -> Declaration -> Output
-applyPartiallyAppliedHost interactives hostFunction partiallyApplied functionName declaration =
+applyPartiallyAppliedHost : Interactives -> PartiallyAppliedFunction -> (List Value -> Output) -> FunctionName -> Declaration -> Output
+applyPartiallyAppliedHost interactives function hostFunction functionName declaration =
     let
-        (PartiallyAppliedFunction _ _ patterns _ _) =
-            partiallyApplied
+        --patterns : List (Node Pattern)
+        --patterns =
+        --    extractPatternFromDeclaration declaration
+        (PartiallyAppliedFunction _ alreadyApplied patterns _ _) =
+            function
 
         maybePairs : Result OutputError ( List ( ParameterName, TypeName ), TypeName )
         maybePairs =
-            Boundary.parseTogether (patterns |> List.map Node.value) declaration 0
-
-        insertIntoEnvFromValue : ( ParameterName, Value ) -> Dict String Value -> Dict String Value
-        insertIntoEnvFromValue ( ParameterName binding, value ) localValues =
-            Dict.insert binding value localValues
-
-        insertIntoEnvFromType : ( ParameterName, TypeName ) -> Dict String Value -> Result OutputError (Dict String Value)
-        insertIntoEnvFromType ( ParameterName binding, TypeName typeName ) localValues =
-            let
-                maybeTypeNode : Maybe InteractiveElement
-                maybeTypeNode =
-                    Dict.get typeName Boundary.typeNodeMap
-
-                maybeRawValue : Maybe RawInteractiveValue
-                maybeRawValue =
-                    Interactives.get ( functionName, ParameterName binding ) interactives
-
-                typeNodeToValue : InteractiveElement -> RawInteractiveValue -> Result OutputError Value
-                typeNodeToValue typeNode rawValue =
-                    typeNode.conversion rawValue
-
-                maybeValue : Maybe (Result OutputError Value)
-                maybeValue =
-                    Maybe.map2 typeNodeToValue maybeTypeNode maybeRawValue
-            in
-            case maybeValue of
-                Just (Ok value) ->
-                    Dict.insert binding value localValues |> Ok
-
-                _ ->
-                    ("Missing \"" ++ binding ++ "\"") |> OutputError |> Err
+            Boundary.parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
 
         find : ( ParameterName, TypeName ) -> Result OutputError Value
-        find ( (ParameterName parameterNameString) as parameterName, TypeName typeName ) =
+        find ( parameterName, TypeName typeName ) =
             let
                 maybeTypeNode : Result OutputError InteractiveElement
                 maybeTypeNode =
@@ -1083,6 +1059,19 @@ extractNameFromDeclaration declaration =
 
         Destructuring _ _ ->
             "destructuring"
+
+
+extractPatternFromDeclaration : Declaration -> List (Node Pattern)
+extractPatternFromDeclaration declaration =
+    case declaration of
+        FunctionDeclaration function ->
+            function
+                |> .declaration
+                |> Node.value
+                |> .arguments
+
+        _ ->
+            []
 
 
 

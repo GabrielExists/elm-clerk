@@ -40,7 +40,7 @@ one firstSelector _ output f =
                             |> Ok
 
             _ ->
-                Err <| OutputError "Wrong number of arguments"
+                Err <| OutputError <| "Expected 1 argument, got " ++ String.fromInt (List.length args)
 
 
 two :
@@ -70,7 +70,7 @@ two firstSelector secondSelector _ output f =
                                     |> Ok
 
             _ ->
-                Err <| OutputError "Wrong number of arguments"
+                Err <| OutputError <| "Expected 2 arguments, got " ++ String.fromInt (List.length args)
 
 
 three :
@@ -106,4 +106,46 @@ three firstSelector secondSelector thirdSelector _ output f =
                                             |> Ok
 
             _ ->
-                Err <| OutputError "Wrong number of arguments"
+                Err <| OutputError <| "Expected 3 arguments, got " ++ String.fromInt (List.length args)
+
+
+four :
+    InSelector a xa
+    -> InSelector b xb
+    -> InSelector c xc
+    -> InSelector d xd
+    -> To
+    -> OutSelector out xo
+    -> (a -> b -> c -> d -> out)
+    -> (List Value -> Output)
+four firstSelector secondSelector thirdSelector fourthSelector _ output f =
+    \args ->
+        case args of
+            [ firstArg, secondArg, thirdArg, fourthArg ] ->
+                case firstSelector.fromValue firstArg of
+                    Nothing ->
+                        Err <| OutputError <| "Expected the first argument to be " ++ firstSelector.name ++ ", got " ++ Value.toString firstArg
+
+                    Just first ->
+                        case secondSelector.fromValue secondArg of
+                            Nothing ->
+                                Err <| OutputError <| "Expected the second argument to be " ++ secondSelector.name ++ ", got " ++ Value.toString secondArg
+
+                            Just second ->
+                                case thirdSelector.fromValue thirdArg of
+                                    Nothing ->
+                                        Err <| OutputError <| "Expected the third argument to be " ++ thirdSelector.name ++ ", got " ++ Value.toString thirdArg
+
+                                    Just third ->
+                                        case fourthSelector.fromValue fourthArg of
+                                            Nothing ->
+                                                Err <| OutputError <| "Expected the fourth argument to be " ++ fourthSelector.name ++ ", got " ++ Value.toString fourthArg
+
+                                            Just fourth ->
+                                                f first second third fourth
+                                                    |> output.toValue
+                                                    |> OutputValue
+                                                    |> Ok
+
+            _ ->
+                Err <| OutputError <| "Expected 4 arguments, got " ++ String.fromInt (List.length args)
