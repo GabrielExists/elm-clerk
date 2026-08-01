@@ -236,7 +236,7 @@ update msg model =
                 ( model, Cmd.none )
 
         RunOnHostChanged runOnHost ->
-            ( { model | runOnHost = runOnHost }, Cmd.none )
+            ( { model | runOnHost = runOnHost }, sendToBackend (NewRunOnHostToBackend runOnHost) )
 
         Poll ->
             let
@@ -259,7 +259,7 @@ updateFromBackend msg model =
         NoOpToFrontend ->
             ( model, Cmd.none )
 
-        Startup { interactives, scroll, checksum, fileName } ->
+        Startup { interactives, scroll, checksum, fileName, runOnHost } ->
             let
                 ( newModel, cmd ) =
                     updateCurrentChecksum
@@ -267,6 +267,7 @@ updateFromBackend msg model =
                             | interactives = interactives
                             , checksum = Just checksum
                             , currentFileName = fileName
+                            , runOnHost = runOnHost
                         }
             in
             ( newModel
@@ -779,62 +780,6 @@ makeFile (FullCode source) =
 
 
 
---returnTypeFromValue : Value -> TypeName
---returnTypeFromValue value =
---    case value of
---        String _ ->
---            TypeName "String"
---        Int _ ->
---            TypeName "Int"
---
---        Float _ ->
---            TypeName "Float"
---
---        Char _ ->
---            TypeName "Char"
---
---
---        Bool _ ->
---            TypeName "Bool"
---
---
---        Unit ->
---            TypeName "Unit"
---
---
---        Tuple first second ->
---            let
---                TypeName firstName = returnTypeFromValue first
---                TypeName secondName = returnTypeFromValue second
---            in
---            TypeName ("(" ++ firstName ++ ", " ++ secondName ++ ")")
---
---
---        Triple first second third ->
---            let
---                TypeName firstName = returnTypeFromValue first
---                TypeName secondName = returnTypeFromValue second
---                TypeName thirdName = returnTypeFromValue third
---            in
---            TypeName ("(" ++ firstName ++ ", " ++ secondName ++ "," ++ thirdName ++ ")")
---
---
---        Record _ -> TypeName "{..}"
---
---
---        Custom _ _ _ -> TypeName "unknown"
---
---
---        PartiallyApplied _ -> TypeName "unknown"
---
---
---        JsArray _ -> TypeName "unknown"
---
---
---        List list ->
---            let
---            TypeName itemName = returnTypeFromValue
---        TypeName "unknown"
 -- EVALUATION
 
 
@@ -1114,11 +1059,11 @@ view model =
                             |> List.singleton
                        )
                     ++ viewSettings model.runOnHost
-                    ++ (model.source
-                            |> Maybe.map List.singleton
-                            |> Maybe.withDefault []
-                            |> List.map (\source -> viewCode (Code (getHostText source model.functions model.constants)))
-                       )
+                    --++ (model.source
+                    --        |> Maybe.map List.singleton
+                    --        |> Maybe.withDefault []
+                    --        |> List.map (\source -> viewCode (Code (getHostText source model.functions model.constants)))
+                    --   )
                     ++ (case ( model.source, model.currentFileName, model.error ) of
                             ( Just _, _, _ ) ->
                                 model.sections

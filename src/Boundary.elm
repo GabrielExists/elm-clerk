@@ -61,6 +61,13 @@ getSelectorFromTypeName (TypeName typeName) =
                 , annotation = Nothing
                 }
 
+        "Html msg" ->
+            Elm.value
+                { importFrom = [ "Kernel" ]
+                , name = "html"
+                , annotation = Nothing
+                }
+
         _ ->
             case removeStartsWith "List " typeName of
                 Just inner ->

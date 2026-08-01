@@ -27,6 +27,7 @@ init =
       , scroll = 0
       , checksum = ""
       , fileName = Nothing
+      , runOnHost = False
       }
     , Cmd.none
     )
@@ -62,12 +63,16 @@ updateFromFrontend _ clientId msg model =
                     , scroll = model.scroll
                     , checksum = model.checksum
                     , fileName = model.fileName
+                    , runOnHost = model.runOnHost
                     }
                 )
             )
 
         NewScrollToBackend y ->
             ( { model | scroll = y }, Cmd.none )
+
+        NewRunOnHostToBackend runOnHost ->
+            ( { model | runOnHost = runOnHost }, Cmd.none )
 
         NewChecksumToBackend newChecksum ->
             ( { model | checksum = newChecksum }, notifyIn (RequestNewSource clientId) 1000 )

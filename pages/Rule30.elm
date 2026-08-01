@@ -20,7 +20,48 @@ import Value
 -- Let's explore cellular automata in an Elm Clerk Notebook.
 --
 -- We start by creating custom viewers for numbers, lists and lists of lists.
---
+
+
+viewerBlock : Int -> Html msg
+viewerBlock number =
+    let
+        color =
+            if number > 0 then
+                "black"
+
+            else
+                "white"
+    in
+    Html.div
+        [ style "display" "inline-block"
+        , style "width" "16px"
+        , style "height" "16px"
+        , style "border-style" "solid"
+        , style "border-color" "black"
+        , style "border-width" "1.5px"
+        , style "background-color" color
+        ]
+        []
+
+
+viewerBlockRow : List Int -> Html msg
+viewerBlockRow numbers =
+    numbers
+        |> List.map
+            viewerBlock
+        |> Html.div [ HA.style "float" "left" ]
+
+
+viewerBlockGrid : List (List Int) -> Html msg
+viewerBlockGrid lines =
+    lines
+        |> List.map viewerBlockRow
+        |> List.map List.singleton
+        |> List.map (Html.div [])
+        |> Html.div []
+
+
+
 -- These viewers take the form of a function which takes a dynamic representation of
 -- an elm structure and returns Just Html if it's a value the viewer can handle.
 -- We iterate through the viewers, and the first one that returns a value is used,

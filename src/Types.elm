@@ -43,6 +43,7 @@ type alias BackendModel =
     , scroll : Float
     , checksum : String
     , fileName : Maybe FileName
+    , runOnHost : Bool
     }
 
 
@@ -175,6 +176,7 @@ type ToBackend
     = NoOpToBackend
     | InteractivesToBackend Interactives
     | NewScrollToBackend Float
+    | NewRunOnHostToBackend Bool
     | RequestStartup
     | NewChecksumToBackend String
     | NewFilenameToBackend FileName
@@ -188,7 +190,7 @@ type BackendMsg
 
 type ToFrontend
     = NoOpToFrontend
-    | Startup { interactives : Interactives, scroll : Float, checksum : String, fileName : Maybe FileName }
+    | Startup { interactives : Interactives, scroll : Float, checksum : String, fileName : Maybe FileName, runOnHost : Bool }
     | RequestNewSourceToFrontend
     | RequestNewFileNameToFrontend FileName
 

@@ -1,8 +1,10 @@
 module HostFunctions exposing (..)
 
 import Elm.Syntax.ModuleName exposing (ModuleName)
+import Html
 import InterpreterTypes exposing (Value)
-import Kernel exposing (InSelector, OutSelector, To)
+import Kernel exposing (InSelector, OutSelector, Selector, To)
+import Kernel.Html
 import Types exposing (Output, OutputError(..), OutputValue(..))
 import Value
 
@@ -26,6 +28,31 @@ one :
     -> (a -> out)
     -> (List Value -> Output)
 one firstSelector _ output f =
+    \args ->
+        case args of
+            [ firstArg ] ->
+                case firstSelector.fromValue firstArg of
+                    Nothing ->
+                        Err <| OutputError <| "Expected the first argument to be " ++ firstSelector.name ++ ", got " ++ Value.toString firstArg
+
+                    Just first ->
+                        f first
+                            |> output.toValue
+                            |> OutputValue
+                            |> Ok
+
+            _ ->
+                Err <| OutputError <| "Expected 1 argument, got " ++ String.fromInt (List.length args)
+
+
+oneWithViewer :
+    InSelector a xa
+    -> To
+    -> OutSelector out xo
+    -> (a -> out)
+    -> (a -> Html.Html msg)
+    -> (List Value -> Output)
+oneWithViewer firstSelector _ output f viewer =
     \args ->
         case args of
             [ firstArg ] ->
@@ -149,3 +176,12 @@ four firstSelector secondSelector thirdSelector fourthSelector _ output f =
 
             _ ->
                 Err <| OutputError <| "Expected 4 arguments, got " ++ String.fromInt (List.length args)
+
+
+html : OutSelector (Html.Html msg) {}
+html =
+    { fromValue =
+        \value ->
+            Kernel.html.fromValue value |> Maybe.map Kernel.Html.htmlToReal
+    , name = "Html.Html"
+    }
