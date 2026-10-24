@@ -399,6 +399,36 @@ getHostText fullSource functions constants =
                     )
                 |> Maybe.withDefault []
 
+        viewers : IdDict TypeName Elm.Expression
+        viewers =
+            declarations
+                |> List.filterMap
+                    (\name ->
+                        if String.startsWith "viewer" name then
+                            case IdDict.get (FunctionName name) functions of
+                                Just function ->
+                                    case function.pairs of
+                                        [ ( _, typeName ) ] ->
+                                            Just
+                                                ( typeName
+                                                , Elm.value
+                                                    { importFrom = maybeFileName
+                                                    , name = name
+                                                    , annotation = Nothing
+                                                    }
+                                                )
+
+                                        _ ->
+                                            Nothing
+
+                                _ ->
+                                    Nothing
+
+                        else
+                            Nothing
+                    )
+                |> IdDict.fromList (\(TypeName typeName) -> typeName)
+
         fileListDeclaration : Elm.Declaration
         fileListDeclaration =
             (declarations
@@ -424,16 +454,11 @@ getHostText fullSource functions constants =
                                                     )
                                              )
                                                 ++ [ Elm.value
-                                                        { importFrom = [ "Kernel" ]
-                                                        , name = "to"
-                                                        , annotation = Nothing
-                                                        }
-                                                   , Boundary.getSelectorFromTypeName function.return
-                                                   , Elm.value
                                                         { importFrom = maybeFileName
                                                         , name = name
                                                         , annotation = Nothing
                                                         }
+                                                   , Boundary.getViewerFromTypeName viewers function.return
                                                    ]
                                             )
                                         )
@@ -448,12 +473,12 @@ getHostText fullSource functions constants =
                                                 , annotation = Just Elm.Annotation.int -- I need to add this somewhere in order for it to not generate an (incorrect) type signature
                                                 }
                                             )
-                                            [ Boundary.getSelectorFromTypeName returnValue
-                                            , Elm.value
+                                            [ Elm.value
                                                 { importFrom = maybeFileName
                                                 , name = name
                                                 , annotation = Nothing
                                                 }
+                                            , Boundary.getViewerFromTypeName viewers returnValue
                                             ]
                                         )
 

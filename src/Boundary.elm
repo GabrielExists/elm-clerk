@@ -9,12 +9,13 @@ import Elm.Syntax.Node as Node
 import Elm.Syntax.Pattern exposing (Pattern(..))
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
 import FastDict as Dict exposing (Dict)
+import IdDict
 import InterpreterTypes exposing (Value(..))
 import Kernel
 import List.Extra
 import Result.Extra
 import ToString exposing (annotationToString, patternToString)
-import Types exposing (FrontendMsg(..), FunctionName, OutputError(..), ParameterName(..), RawInteractiveValue(..), TypeName(..))
+import Types exposing (FrontendMsg(..), FunctionName, IdDict, OutputError(..), ParameterName(..), RawInteractiveValue(..), TypeName(..))
 import Value
 
 
@@ -88,6 +89,28 @@ getSelectorFromTypeName (TypeName typeName) =
                         , name = "unknown"
                         , annotation = Nothing
                         }
+
+
+getViewerFromTypeName : IdDict TypeName Elm.Expression -> TypeName -> Elm.Expression
+getViewerFromTypeName viewers ((TypeName typeNameString) as typeName) =
+    if String.startsWith "Html " typeNameString || String.startsWith "Html.Html " typeNameString then
+        Elm.value
+            { importFrom = []
+            , name = "identity"
+            , annotation = Nothing
+            }
+
+    else
+        case IdDict.get typeName viewers of
+            Just expression ->
+                expression
+
+            _ ->
+                Elm.value
+                    { importFrom = [ "HostFunctions" ]
+                    , name = "missingViewer"
+                    , annotation = Nothing
+                    }
 
 
 removeStartsWith : String -> String -> Maybe String

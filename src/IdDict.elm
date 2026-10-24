@@ -9,6 +9,11 @@ empty transform =
     IdDict Dict.empty transform
 
 
+fromList : (kind -> String) -> List ( kind, value ) -> IdDict kind value
+fromList transform input =
+    List.foldl (\( key, value ) dict -> insert key value dict) (empty transform) input
+
+
 insert : kind -> value -> IdDict kind value -> IdDict kind value
 insert key value (IdDict dict transform) =
     IdDict (Dict.insert (transform key) value dict) transform

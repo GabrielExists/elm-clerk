@@ -5,29 +5,28 @@ import Html
 import InterpreterTypes exposing (Value)
 import Kernel exposing (InSelector, OutSelector, Selector, To)
 import Kernel.Html
-import Types exposing (Output, OutputError(..), OutputValue(..))
+import Types exposing (FrontendMsg, Output, OutputError(..), OutputValue(..))
 import Value
 
 
 constant :
-    OutSelector out xo
-    -> out
+    out
+    -> (out -> Html.Html FrontendMsg)
     -> (List Value -> Output)
-constant output f =
+constant f viewer =
     \_ ->
         f
-            |> output.toValue
-            |> OutputValue
+            |> viewer
+            |> OutputHtml
             |> Ok
 
 
 one :
     InSelector a xa
-    -> To
-    -> OutSelector out xo
     -> (a -> out)
+    -> (out -> Html.Html FrontendMsg)
     -> (List Value -> Output)
-one firstSelector _ output f =
+one firstSelector f viewer =
     \args ->
         case args of
             [ firstArg ] ->
@@ -37,33 +36,8 @@ one firstSelector _ output f =
 
                     Just first ->
                         f first
-                            |> output.toValue
-                            |> OutputValue
-                            |> Ok
-
-            _ ->
-                Err <| OutputError <| "Expected 1 argument, got " ++ String.fromInt (List.length args)
-
-
-oneWithViewer :
-    InSelector a xa
-    -> To
-    -> OutSelector out xo
-    -> (a -> out)
-    -> (a -> Html.Html msg)
-    -> (List Value -> Output)
-oneWithViewer firstSelector _ output f viewer =
-    \args ->
-        case args of
-            [ firstArg ] ->
-                case firstSelector.fromValue firstArg of
-                    Nothing ->
-                        Err <| OutputError <| "Expected the first argument to be " ++ firstSelector.name ++ ", got " ++ Value.toString firstArg
-
-                    Just first ->
-                        f first
-                            |> output.toValue
-                            |> OutputValue
+                            |> viewer
+                            |> OutputHtml
                             |> Ok
 
             _ ->
@@ -73,11 +47,10 @@ oneWithViewer firstSelector _ output f viewer =
 two :
     InSelector a xa
     -> InSelector b xb
-    -> To
-    -> OutSelector out xo
     -> (a -> b -> out)
+    -> (out -> Html.Html FrontendMsg)
     -> (List Value -> Output)
-two firstSelector secondSelector _ output f =
+two firstSelector secondSelector f viewer =
     \args ->
         case args of
             [ firstArg, secondArg ] ->
@@ -92,8 +65,8 @@ two firstSelector secondSelector _ output f =
 
                             Just second ->
                                 f first second
-                                    |> output.toValue
-                                    |> OutputValue
+                                    |> viewer
+                                    |> OutputHtml
                                     |> Ok
 
             _ ->
@@ -104,11 +77,10 @@ three :
     InSelector a xa
     -> InSelector b xb
     -> InSelector c xc
-    -> To
-    -> OutSelector out xo
     -> (a -> b -> c -> out)
+    -> (out -> Html.Html FrontendMsg)
     -> (List Value -> Output)
-three firstSelector secondSelector thirdSelector _ output f =
+three firstSelector secondSelector thirdSelector f viewer =
     \args ->
         case args of
             [ firstArg, secondArg, thirdArg ] ->
@@ -128,8 +100,8 @@ three firstSelector secondSelector thirdSelector _ output f =
 
                                     Just third ->
                                         f first second third
-                                            |> output.toValue
-                                            |> OutputValue
+                                            |> viewer
+                                            |> OutputHtml
                                             |> Ok
 
             _ ->
@@ -141,11 +113,10 @@ four :
     -> InSelector b xb
     -> InSelector c xc
     -> InSelector d xd
-    -> To
-    -> OutSelector out xo
     -> (a -> b -> c -> d -> out)
+    -> (out -> Html.Html FrontendMsg)
     -> (List Value -> Output)
-four firstSelector secondSelector thirdSelector fourthSelector _ output f =
+four firstSelector secondSelector thirdSelector fourthSelector f viewer =
     \args ->
         case args of
             [ firstArg, secondArg, thirdArg, fourthArg ] ->
@@ -170,18 +141,14 @@ four firstSelector secondSelector thirdSelector fourthSelector _ output f =
 
                                             Just fourth ->
                                                 f first second third fourth
-                                                    |> output.toValue
-                                                    |> OutputValue
+                                                    |> viewer
+                                                    |> OutputHtml
                                                     |> Ok
 
             _ ->
                 Err <| OutputError <| "Expected 4 arguments, got " ++ String.fromInt (List.length args)
 
 
-html : OutSelector (Html.Html msg) {}
-html =
-    { fromValue =
-        \value ->
-            Kernel.html.fromValue value |> Maybe.map Kernel.Html.htmlToReal
-    , name = "Html.Html"
-    }
+missingViewer : List Value -> Output
+missingViewer =
+    \args -> OutputError "No viewer!" |> Err
