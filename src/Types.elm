@@ -27,7 +27,6 @@ type alias FrontendModel =
     , functions : IdDict FunctionName Function
     , constants : IdDict FunctionName Constant
     , viewers : List Viewer
-    , hostViewers : List HostViewer
     , outputs : IdDict FunctionName Output
     , runOnHost : Bool
     }
@@ -65,10 +64,6 @@ type alias ParsedSection =
 
 type alias Viewer =
     Value -> Result OutputError (Maybe (Html.Html FrontendMsg))
-
-
-type alias HostViewer =
-    Value -> Maybe (Html.Html FrontendMsg)
 
 
 type Cell

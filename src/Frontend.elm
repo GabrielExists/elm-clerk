@@ -7,6 +7,7 @@ import Browser.Navigation as Nav
 import Chart as C
 import Chart.Attributes as CA
 import Common exposing (notifyIn)
+import DefaultViewers
 import Element exposing (Attribute, Element, clipX, el, fill, height, maximum, paddingEach, paragraph, scrollbarX, scrollbarY, shrink, text, width)
 import Element.Background
 import Element.Border
@@ -56,11 +57,15 @@ import Regex
 import Result.Extra
 import Task
 import ToString exposing (annotationToString, errorToString, evalErrorDataToString, httpErrorToString, patternToString)
-import Types exposing (BackendMsg(..), Cell(..), Code(..), Constant, FileName(..), FrontendModel, FrontendMsg(..), FullCode(..), Function, FunctionName(..), HostViewer, IdDict, Interactives(..), Markdown(..), Output, OutputError(..), OutputValue(..), ParameterName(..), ParsedSection, RawInteractiveValue(..), Section(..), ToBackend(..), ToFrontend(..), TypeName(..), Viewer)
+import Types exposing (BackendMsg(..), Cell(..), Code(..), Constant, FileName(..), FrontendModel, FrontendMsg(..), FullCode(..), Function, FunctionName(..), IdDict, Interactives(..), Markdown(..), Output, OutputError(..), OutputValue(..), ParameterName(..), ParsedSection, RawInteractiveValue(..), Section(..), ToBackend(..), ToFrontend(..), TypeName(..), Viewer)
 import UI.Source as Source
 import Url
 import Value
-import Viewers
+
+
+overrideAlwaysHost : Bool
+overrideAlwaysHost =
+    True
 
 
 
@@ -96,7 +101,6 @@ init _ key =
       , functions = IdDict.empty (\(FunctionName functionName) -> functionName)
       , constants = IdDict.empty (\(FunctionName functionName) -> functionName)
       , viewers = []
-      , hostViewers = []
       , outputs = IdDict.empty (\(FunctionName functionName) -> functionName)
       , reloadRequests = IdDict.empty (\(FunctionName functionName) -> functionName)
       , runOnHost = True
@@ -228,7 +232,16 @@ update msg model =
                 let
                     newOutput : Result OutputError OutputValue
                     newOutput =
-                        calculateOutput model.runOnHost model.interactives model.functions functionName
+                        calculateOutput
+                            (if overrideAlwaysHost then
+                                True
+
+                             else
+                                model.runOnHost
+                            )
+                            model.interactives
+                            model.functions
+                            functionName
                 in
                 ( { model | outputs = IdDict.insert functionName newOutput model.outputs }, Cmd.none )
 
@@ -540,14 +553,21 @@ evaluateFullSource source model =
                 |> Result.andThen Eval.Module.buildInitialEnv
 
         ( viewers, sections, ( functions, constants ) ) =
-            evaluateSections model.runOnHost source maybeEnv
+            evaluateSections
+                (if overrideAlwaysHost then
+                    True
+
+                 else
+                    model.runOnHost
+                )
+                source
+                maybeEnv
     in
     { model
         | source = Just source
         , functions = functions
         , constants = constants
         , viewers = viewers
-        , hostViewers = makeHostViewers maybeEnv
         , sections = sections
     }
 
@@ -780,18 +800,6 @@ makeConstant functionName declaration =
         |> Result.andThen Boundary.parseReturnType
         |> Result.toMaybe
         |> Maybe.map (\typeName -> ( functionName, Types.Constant typeName ))
-
-
-makeHostViewers : Result x Env -> List (Value -> Maybe (Html.Html never))
-makeHostViewers maybeEnv =
-    let
-        moduleName : String
-        moduleName =
-            String.join "" (Result.withDefault [] (Result.map .currentModule maybeEnv))
-    in
-    Dict.fromList Viewers.viewers
-        |> Dict.get moduleName
-        |> Maybe.withDefault []
 
 
 makeFile : FullCode -> Result Error File
@@ -1083,7 +1091,12 @@ view model =
                             |> Element.el [ Element.paddingXY 0 4 ]
                             |> List.singleton
                        )
-                    ++ viewSettings model.runOnHost
+                    ++ (if overrideAlwaysHost then
+                            []
+
+                        else
+                            viewSettings model.runOnHost
+                       )
                     --++ (model.source
                     --        |> Maybe.map List.singleton
                     --        |> Maybe.withDefault []
@@ -1094,7 +1107,6 @@ view model =
                                 model.sections
                                     |> List.map
                                         (viewSection model.viewers
-                                            model.hostViewers
                                             model.outputs
                                             model.functions
                                             model.interactives
@@ -1165,23 +1177,9 @@ viewSettings runOnHost =
 --, label : Label msg
 
 
-viewSection : List Viewer -> List HostViewer -> IdDict FunctionName Output -> IdDict FunctionName Function -> Interactives -> Section -> Element FrontendMsg
-viewSection viewers hostViewers outputs functions interactives section =
+viewSection : List Viewer -> IdDict FunctionName Output -> IdDict FunctionName Function -> Interactives -> Section -> Element FrontendMsg
+viewSection viewers outputs functions interactives section =
     let
-        applyHostViewer : Value -> Maybe (Html.Html FrontendMsg)
-        applyHostViewer value =
-            List.Extra.stoppableFoldl
-                (\hostViewer _ ->
-                    case hostViewer value of
-                        Just transformed ->
-                            Stop (Just transformed)
-
-                        Nothing ->
-                            Continue Nothing
-                )
-                Nothing
-                hostViewers
-
         applyViewer : Value -> Result OutputError (Maybe (Html.Html FrontendMsg))
         applyViewer value =
             let
@@ -1221,12 +1219,7 @@ viewSection viewers hostViewers outputs functions interactives section =
                             Ok (OutputHtml html)
 
                         Ok Nothing ->
-                            case applyHostViewer value of
-                                Just transformed ->
-                                    Ok (OutputHtml transformed)
-
-                                Nothing ->
-                                    Ok (OutputValue value)
+                            Ok (OutputValue value)
     in
     Element.column [ width fill, paddingEach { top = 10, right = 0, bottom = 0, left = 0 } ]
         (case section of

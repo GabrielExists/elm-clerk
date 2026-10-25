@@ -43,8 +43,9 @@ def main():
             r = requests.get("http://localhost:8000/", timeout=5)
             r.raise_for_status()
             if '"type": "compile-errors",' in r.text:
-                with open(path, "w") as file_handle:
-                    file_handle.write(CLEARED_CONTENTS)
+                if True:
+                    with open(path, "w") as file_handle:
+                        file_handle.write(CLEARED_CONTENTS)
 
                 print("Problem!")
     except KeyboardInterrupt:

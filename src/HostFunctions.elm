@@ -1,5 +1,6 @@
 module HostFunctions exposing (..)
 
+import Element
 import Elm.Syntax.ModuleName exposing (ModuleName)
 import Html
 import InterpreterTypes exposing (Value)
@@ -149,6 +150,6 @@ four firstSelector secondSelector thirdSelector fourthSelector f viewer =
                 Err <| OutputError <| "Expected 4 arguments, got " ++ String.fromInt (List.length args)
 
 
-missingViewer : List Value -> Output
-missingViewer =
-    \args -> OutputError "No viewer!" |> Err
+missingViewer : anything -> Html.Html FrontendMsg
+missingViewer _ =
+    Html.text ""

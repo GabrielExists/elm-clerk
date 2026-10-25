@@ -27,10 +27,10 @@ viewerBlock number =
     let
         color =
             if number > 0 then
-                "black"
+                "white"
 
             else
-                "white"
+                "black"
     in
     Html.div
         [ style "display" "inline-block"
@@ -72,6 +72,11 @@ viewerBlockGrid lines =
 -- and lists of lists of numbers as several rows.
 -- Let's test these!
 -- Any simple declaration renders its value.
+
+
+thing : String
+thing =
+    "1235"
 
 
 black : Int
