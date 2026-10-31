@@ -154,9 +154,9 @@ type FrontendMsg
     = UrlClicked UrlRequest
     | UrlChanged Url
     | NoOpFrontendMsg
-    | GotText (Result Http.Error String)
     | GotList (Result Http.Error (List String))
-    | WroteText (Result Http.Error ())
+    | Open4GotFile (Result Http.Error String)
+    | Open8WroteHost (Result Http.Error ())
     | ListItemClicked FileName
     | InteractiveUpdated ( FunctionName, ParameterName ) RawInteractiveValue
     | CheckGenerateOutputs
@@ -173,21 +173,21 @@ type ToBackend
     | NewScrollToBackend Float
     | NewRunOnHostToBackend Bool
     | RequestStartup
-    | NewChecksumToBackend String
-    | NewFilenameToBackend FileName
+    | Open5ChecksumToBackend String
+    | Open1FilenameToBackend FileName
 
 
 type BackendMsg
     = NoOpBackendMsg
-    | RequestNewSource ClientId
-    | RequestNewFileName ClientId FileName
+    | Open2RequestLoad ClientId FileName
+    | Open6RequestHost ClientId
 
 
 type ToFrontend
     = NoOpToFrontend
     | Startup { interactives : Interactives, scroll : Float, checksum : String, fileName : Maybe FileName, runOnHost : Bool }
-    | RequestNewSourceToFrontend
-    | RequestNewFileNameToFrontend FileName
+    | Open3RequestLoadToFrontend FileName
+    | Open7RequestHostToFrontend
 
 
 type Section

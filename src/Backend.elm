@@ -39,11 +39,11 @@ update msg model =
         NoOpBackendMsg ->
             ( model, Cmd.none )
 
-        RequestNewSource clientId ->
-            ( model, sendToFrontend clientId RequestNewSourceToFrontend )
+        Open6RequestHost clientId ->
+            ( model, sendToFrontend clientId Open7RequestHostToFrontend )
 
-        RequestNewFileName clientId fileName ->
-            ( model, sendToFrontend clientId (RequestNewFileNameToFrontend fileName) )
+        Open2RequestLoad clientId fileName ->
+            ( model, sendToFrontend clientId (Open3RequestLoadToFrontend fileName) )
 
 
 updateFromFrontend : SessionId -> ClientId -> ToBackend -> Model -> ( Model, Cmd BackendMsg )
@@ -74,8 +74,8 @@ updateFromFrontend _ clientId msg model =
         NewRunOnHostToBackend runOnHost ->
             ( { model | runOnHost = runOnHost }, Cmd.none )
 
-        NewChecksumToBackend newChecksum ->
-            ( { model | checksum = newChecksum }, notifyIn (RequestNewSource clientId) 1000 )
+        Open5ChecksumToBackend newChecksum ->
+            ( { model | checksum = newChecksum }, notifyIn (Open6RequestHost clientId) 1000 )
 
-        NewFilenameToBackend fileName ->
-            ( { model | fileName = Just fileName }, notifyIn (RequestNewFileName clientId fileName) 1000 )
+        Open1FilenameToBackend fileName ->
+            ( { model | fileName = Just fileName }, notifyIn (Open2RequestLoad clientId fileName) 1000 )

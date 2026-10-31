@@ -137,7 +137,7 @@ update msg model =
         NoOpFrontendMsg ->
             ( model, Cmd.none )
 
-        GotText result ->
+        Open4GotFile result ->
             case result of
                 Ok source ->
                     let
@@ -175,7 +175,7 @@ update msg model =
                     , Cmd.none
                     )
 
-        WroteText _ ->
+        Open8WroteHost _ ->
             ( model, Cmd.none )
 
         ListItemClicked fileName ->
@@ -183,7 +183,7 @@ update msg model =
                 | currentFileName = Just fileName
                 , outputs = IdDict.clear model.outputs
               }
-            , sendToBackend (NewFilenameToBackend fileName)
+            , sendToBackend (Open1FilenameToBackend fileName)
             )
 
         InteractiveUpdated names value ->
@@ -296,7 +296,7 @@ updateFromBackend msg model =
                 ]
             )
 
-        RequestNewSourceToFrontend ->
+        Open7RequestHostToFrontend ->
             case model.source of
                 Just source ->
                     ( model
@@ -304,14 +304,14 @@ updateFromBackend msg model =
                     , Http.post
                         { url = "/_x/write/src/Host.elm"
                         , body = Http.stringBody "application/text" (getHostText source model.functions model.constants)
-                        , expect = Http.expectWhatever WroteText
+                        , expect = Http.expectWhatever Open8WroteHost
                         }
                     )
 
                 Nothing ->
                     ( { model | error = "Requested new source when there was no source yet" }, Cmd.none )
 
-        RequestNewFileNameToFrontend fileName ->
+        Open3RequestLoadToFrontend fileName ->
             ( model
             , requestPage fileName
             )
@@ -331,7 +331,7 @@ updateCurrentChecksum model =
             else
                 ( { model | checksum = Just checksum }
                 , Cmd.batch
-                    [ sendToBackend (NewChecksumToBackend checksum)
+                    [ sendToBackend (Open5ChecksumToBackend checksum)
                     ]
                 )
 
@@ -343,7 +343,7 @@ requestPage : FileName -> Cmd FrontendMsg
 requestPage (FileName fileName) =
     Http.get
         { url = "/_x/read/pages/" ++ fileName
-        , expect = Http.expectString GotText
+        , expect = Http.expectString Open4GotFile
         }
 
 
