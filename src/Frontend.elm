@@ -137,7 +137,7 @@ update msg model =
         NoOpFrontendMsg ->
             ( model, Cmd.none )
 
-        Open4GotFile result ->
+        Open4FetchedFile result ->
             case result of
                 Ok source ->
                     let
@@ -145,6 +145,31 @@ update msg model =
                             updateCurrentChecksum (evaluateFullSource (FullCode source) model)
                     in
                     ( newModel, Cmd.batch [ newCmd, notifyIn CheckGenerateOutputs 100 ] )
+
+                Err error ->
+                    ( { model
+                        | error =
+                            httpErrorToString error
+                      }
+                    , Cmd.none
+                    )
+
+        Open8FetchedDefaults result ->
+            case result of
+                Ok defaultViewersText ->
+                    case model.source of
+                        Just source ->
+                            ( model
+                              --, Cmd.none
+                            , Http.post
+                                { url = "/_x/write/src/Host.elm"
+                                , body = Http.stringBody "application/text" (getHostText source (FullCode defaultViewersText) model.functions model.constants)
+                                , expect = Http.expectWhatever Open9WroteHost
+                                }
+                            )
+
+                        Nothing ->
+                            ( { model | error = "Requested new source when there was no source yet" }, Cmd.none )
 
                 Err error ->
                     ( { model
@@ -175,7 +200,7 @@ update msg model =
                     , Cmd.none
                     )
 
-        Open8WroteHost _ ->
+        Open9WroteHost _ ->
             ( model, Cmd.none )
 
         ListItemClicked fileName ->
@@ -297,19 +322,12 @@ updateFromBackend msg model =
             )
 
         Open7RequestHostToFrontend ->
-            case model.source of
-                Just source ->
-                    ( model
-                      --, Cmd.none
-                    , Http.post
-                        { url = "/_x/write/src/Host.elm"
-                        , body = Http.stringBody "application/text" (getHostText source model.functions model.constants)
-                        , expect = Http.expectWhatever Open8WroteHost
-                        }
-                    )
-
-                Nothing ->
-                    ( { model | error = "Requested new source when there was no source yet" }, Cmd.none )
+            ( model
+            , Http.get
+                { url = "/_x/read/src/DefaultViewers.elm"
+                , expect = Http.expectString Open8FetchedDefaults
+                }
+            )
 
         Open3RequestLoadToFrontend fileName ->
             ( model
@@ -343,7 +361,7 @@ requestPage : FileName -> Cmd FrontendMsg
 requestPage (FileName fileName) =
     Http.get
         { url = "/_x/read/pages/" ++ fileName
-        , expect = Http.expectString Open4GotFile
+        , expect = Http.expectString Open4FetchedFile
         }
 
 
@@ -385,66 +403,80 @@ parseSection (Code source) =
     ParserFast.run parser source
 
 
-getHostText : FullCode -> IdDict FunctionName Function -> IdDict FunctionName Constant -> String
-getHostText fullSource functions constants =
+getHostText : FullCode -> FullCode -> IdDict FunctionName Function -> IdDict FunctionName Constant -> String
+getHostText fullSource defaultViewersSource functions constants =
     let
-        maybeFile : Result Error File
-        maybeFile =
-            makeFile fullSource
+        makeViewers source =
+            let
+                maybeFile : Result Error File
+                maybeFile =
+                    makeFile source
 
-        maybeFileName : List String
-        maybeFileName =
-            maybeFile
-                |> Result.map .moduleDefinition
-                |> Result.map Node.value
-                |> Result.map Module.moduleName
-                |> Result.withDefault []
+                maybeFileName : List String
+                maybeFileName =
+                    maybeFile
+                        |> Result.map .moduleDefinition
+                        |> Result.map Node.value
+                        |> Result.map Module.moduleName
+                        |> Result.withDefault []
 
-        declarations : List String
-        declarations =
-            Result.toMaybe maybeFile
-                |> Maybe.map
-                    (\file ->
-                        file
-                            |> .declarations
-                            |> List.map Node.value
-                            |> List.map extractNameFromDeclaration
-                    )
-                |> Maybe.withDefault []
+                declarations : List String
+                declarations =
+                    Result.toMaybe maybeFile
+                        |> Maybe.map
+                            (\file ->
+                                file
+                                    |> .declarations
+                                    |> List.map Node.value
+                                    |> List.map extractNameFromDeclaration
+                            )
+                        |> Maybe.withDefault []
 
-        viewers : IdDict TypeName Elm.Expression
-        viewers =
-            declarations
-                |> List.filterMap
-                    (\name ->
-                        if String.startsWith "viewer" name then
-                            case IdDict.get (FunctionName name) functions of
-                                Just function ->
-                                    case function.pairs of
-                                        [ ( _, typeName ) ] ->
-                                            Just
-                                                ( typeName
-                                                , Elm.value
-                                                    { importFrom = maybeFileName
-                                                    , name = name
-                                                    , annotation = Nothing
-                                                    }
-                                                )
+                createdViewers : IdDict TypeName Elm.Expression
+                createdViewers =
+                    declarations
+                        |> List.filterMap
+                            (\name ->
+                                if String.startsWith "viewer" name then
+                                    case IdDict.get (FunctionName name) functions of
+                                        Just function ->
+                                            case function.pairs of
+                                                [ ( _, typeName ) ] ->
+                                                    Just
+                                                        ( typeName
+                                                        , Elm.value
+                                                            { importFrom = maybeFileName
+                                                            , name = name
+                                                            , annotation = Nothing
+                                                            }
+                                                        )
+
+                                                _ ->
+                                                    Nothing
 
                                         _ ->
                                             Nothing
 
-                                _ ->
+                                else
                                     Nothing
+                            )
+                        |> IdDict.fromList (\(TypeName typeName) -> typeName)
+            in
+            ( maybeFileName, declarations, createdViewers )
 
-                        else
-                            Nothing
-                    )
-                |> IdDict.fromList (\(TypeName typeName) -> typeName)
+        ( userFileName, userDeclarations, userViewers ) =
+            makeViewers fullSource
+
+        ( _, defaultDeclarations, defaultViewers ) =
+            makeViewers defaultViewersSource
+
+        viewers : IdDict TypeName Elm.Expression
+        viewers =
+            IdDict.overwrite defaultViewers userViewers
 
         fileListDeclaration : Elm.Declaration
         fileListDeclaration =
-            (declarations
+            (userDeclarations
                 |> List.filterMap
                     (\name ->
                         --Elm.fnBuilder
@@ -467,7 +499,7 @@ getHostText fullSource functions constants =
                                                     )
                                              )
                                                 ++ [ Elm.value
-                                                        { importFrom = maybeFileName
+                                                        { importFrom = userFileName
                                                         , name = name
                                                         , annotation = Nothing
                                                         }
@@ -487,7 +519,7 @@ getHostText fullSource functions constants =
                                                 }
                                             )
                                             [ Elm.value
-                                                { importFrom = maybeFileName
+                                                { importFrom = userFileName
                                                 , name = name
                                                 , annotation = Nothing
                                                 }
@@ -501,6 +533,9 @@ getHostText fullSource functions constants =
             )
                 |> Elm.list
                 |> Elm.declaration "functionList"
+
+        (FullCode defaultViewersText) =
+            defaultViewersSource
     in
     --Elm.file [ "My", "Module" ]
     --    [ Elm.declaration "placeholder"
@@ -508,6 +543,7 @@ getHostText fullSource functions constants =
     --    ]
     Elm.file [ "Host" ] [ fileListDeclaration ]
         |> .contents
+        |> (\contents -> contents ++ "\n\n{-\n" ++ defaultViewersText ++ "\n\n" ++ String.join "\n" defaultDeclarations ++ "\n\n" ++ String.join "\n" (IdDict.toList defaultViewers |> List.map (\( key, value ) -> key ++ ", " ++ Elm.toString value)) ++ "-}")
 
 
 getCombinerFromNumArgs numArgs =

@@ -34,6 +34,17 @@ map func (IdDict dict transform) =
     IdDict (Dict.map func dict) transform
 
 
+overwrite : IdDict kind value -> IdDict kind value -> IdDict kind value
+overwrite (IdDict dict transform) (IdDict newValues _) =
+    Dict.merge Dict.insert (\key _ new acc -> Dict.insert key new acc) Dict.insert dict newValues Dict.empty
+        |> (\resultDict -> IdDict resultDict transform)
+
+
+toList : IdDict kind value -> List ( String, value )
+toList (IdDict dict _) =
+    Dict.toList dict
+
+
 filterMap : (String -> a -> Maybe b) -> IdDict k a -> IdDict k b
 filterMap func (IdDict dict transform) =
     IdDict

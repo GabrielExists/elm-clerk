@@ -155,8 +155,9 @@ type FrontendMsg
     | UrlChanged Url
     | NoOpFrontendMsg
     | GotList (Result Http.Error (List String))
-    | Open4GotFile (Result Http.Error String)
-    | Open8WroteHost (Result Http.Error ())
+    | Open4FetchedFile (Result Http.Error String)
+    | Open8FetchedDefaults (Result Http.Error String)
+    | Open9WroteHost (Result Http.Error ())
     | ListItemClicked FileName
     | InteractiveUpdated ( FunctionName, ParameterName ) RawInteractiveValue
     | CheckGenerateOutputs
@@ -173,8 +174,8 @@ type ToBackend
     | NewScrollToBackend Float
     | NewRunOnHostToBackend Bool
     | RequestStartup
-    | Open5ChecksumToBackend String
     | Open1FilenameToBackend FileName
+    | Open5ChecksumToBackend String
 
 
 type BackendMsg

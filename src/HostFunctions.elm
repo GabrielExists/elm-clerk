@@ -150,6 +150,10 @@ four firstSelector secondSelector thirdSelector fourthSelector f viewer =
                 Err <| OutputError <| "Expected 4 arguments, got " ++ String.fromInt (List.length args)
 
 
+
+--noinspection ALL
+
+
 missingViewer : anything -> Html.Html FrontendMsg
 missingViewer _ =
     Html.text ""
