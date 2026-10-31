@@ -27,8 +27,13 @@ import Elm.Syntax.File exposing (File)
 import Elm.Syntax.Module as Module
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Pattern exposing (Pattern(..))
+import Elm.Syntax.Range
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
 import Elm.ToString
+import Elm.TypeInference
+import Elm.TypeInference.InferError exposing (InferError)
+import Elm.TypeInference.ProjectError exposing (ProjectError)
+import Elm.TypeInference.Type
 import Environment
 import Eval.Expression
 import Eval.Module
@@ -470,6 +475,30 @@ getHostText fullSource defaultViewersSource functions constants =
         ( _, defaultDeclarations, defaultViewers ) =
             makeViewers defaultViewersSource
 
+        maybeProject : Result Error Elm.TypeInference.Project
+        maybeProject =
+            makeFile fullSource
+                |> Result.andThen
+                    (\file ->
+                        Elm.TypeInference.empty
+                            |> Elm.TypeInference.addFile file
+                            |> Result.mapError InferenceProjectError
+                    )
+
+        allTypes : Result Error (List String)
+        allTypes =
+            maybeProject
+                |> Result.andThen
+                    (\project ->
+                        Elm.TypeInference.getAllTypes userFileName project
+                            |> (\( result, _ ) -> Result.mapError InferenceInferError result)
+                            |> Result.map
+                                (\items ->
+                                    items
+                                        |> List.map (\( _, typeObject ) -> Elm.TypeInference.Type.toString typeObject)
+                                )
+                    )
+
         viewers : IdDict TypeName Elm.Expression
         viewers =
             IdDict.overwrite defaultViewers userViewers
@@ -838,7 +867,7 @@ makeConstant functionName declaration =
         |> Maybe.map (\typeName -> ( functionName, Types.Constant typeName ))
 
 
-makeFile : FullCode -> Result Error File
+makeFile : FullCode -> Result Error Elm.Syntax.File.File
 makeFile (FullCode source) =
     let
         file : Result (List DeadEnd) File

@@ -4,6 +4,8 @@ import Elm.Syntax.Expression exposing (Expression(..))
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Pattern exposing (Pattern(..), QualifiedNameRef)
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
+import Elm.TypeInference.InferError
+import Elm.TypeInference.ProjectError
 import Http
 import InterpreterTypes exposing (Error(..), EvalErrorData, PartiallyAppliedFunction(..), Value(..))
 import Parser exposing (DeadEnd)
@@ -57,6 +59,12 @@ errorToString error =
 
         EvalError errorData ->
             evalErrorDataToString errorData
+
+        InferenceProjectError projectError ->
+            Elm.TypeInference.ProjectError.toString projectError
+
+        InferenceInferError inferError ->
+            Elm.TypeInference.InferError.toString inferError
 
 
 httpErrorToString : Http.Error -> String

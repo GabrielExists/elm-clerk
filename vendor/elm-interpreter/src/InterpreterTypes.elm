@@ -5,6 +5,8 @@ import Elm.Syntax.Expression exposing (Expression, FunctionImplementation)
 import Elm.Syntax.ModuleName exposing (ModuleName)
 import Elm.Syntax.Node exposing (Node)
 import Elm.Syntax.Pattern exposing (Pattern, QualifiedNameRef)
+import Elm.TypeInference.InferError
+import Elm.TypeInference.ProjectError
 import FastDict as Dict exposing (Dict)
 import Parser exposing (DeadEnd)
 import Recursion exposing (Rec)
@@ -50,6 +52,8 @@ type CallTree
 type Error
     = ParsingError (List DeadEnd)
     | EvalError EvalErrorData
+    | InferenceProjectError Elm.TypeInference.ProjectError.ProjectError
+    | InferenceInferError Elm.TypeInference.InferError.InferError
 
 
 type Value

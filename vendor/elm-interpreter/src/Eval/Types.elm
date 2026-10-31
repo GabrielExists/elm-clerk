@@ -2,6 +2,8 @@ module Eval.Types exposing (combineMap, errorToString, evalErrorToString, failPa
 
 import Elm.Syntax.Expression exposing (Expression)
 import Elm.Syntax.Node exposing (Node)
+import Elm.TypeInference.InferError
+import Elm.TypeInference.ProjectError
 import EvalResult
 import InterpreterTypes exposing (Config, Env, Error(..), Eval, EvalErrorData, EvalErrorKind(..), EvalResult, PartialResult)
 import Parser
@@ -76,6 +78,12 @@ errorToString err =
 
         EvalError evalError ->
             evalErrorToString evalError
+
+        InferenceProjectError projectError ->
+            Elm.TypeInference.ProjectError.toString projectError
+
+        InferenceInferError inferError ->
+            Elm.TypeInference.InferError.toString inferError
 
 
 evalErrorToString : EvalErrorData -> String
