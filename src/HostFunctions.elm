@@ -21,13 +21,37 @@ constant output f =
             |> Ok
 
 
+
+--one :
+--    InSelector a xa
+--    -> To
+--    -> OutSelector out xo
+--    -> (a -> out)
+--    -> (List Value -> Output)
+--one firstSelector _ output f =
+--    \args ->
+--        case args of
+--            [ firstArg ] ->
+--                case firstSelector.fromValue firstArg of
+--                    Nothing ->
+--                        Err <| OutputError <| "Expected the first argument to be " ++ firstSelector.name ++ ", got " ++ Value.toString firstArg
+--
+--                    Just first ->
+--                        f first
+--                            |> output.toValue
+--                            |> OutputValue
+--                            |> Ok
+--
+--            _ ->
+--                Err <| OutputError <| "Expected 1 argument, got " ++ String.fromInt (List.length args)
+
+
 one :
     InSelector a xa
-    -> To
-    -> OutSelector out xo
-    -> (a -> out)
+    -> (a -> o)
+    -> (o -> Html.Html Never)
     -> (List Value -> Output)
-one firstSelector _ output f =
+one firstSelector f viewer =
     \args ->
         case args of
             [ firstArg ] ->
@@ -37,33 +61,9 @@ one firstSelector _ output f =
 
                     Just first ->
                         f first
-                            |> output.toValue
-                            |> OutputValue
-                            |> Ok
-
-            _ ->
-                Err <| OutputError <| "Expected 1 argument, got " ++ String.fromInt (List.length args)
-
-
-oneWithViewer :
-    InSelector a xa
-    -> To
-    -> OutSelector out xo
-    -> (a -> out)
-    -> (a -> Html.Html msg)
-    -> (List Value -> Output)
-oneWithViewer firstSelector _ output f viewer =
-    \args ->
-        case args of
-            [ firstArg ] ->
-                case firstSelector.fromValue firstArg of
-                    Nothing ->
-                        Err <| OutputError <| "Expected the first argument to be " ++ firstSelector.name ++ ", got " ++ Value.toString firstArg
-
-                    Just first ->
-                        f first
-                            |> output.toValue
-                            |> OutputValue
+                            |> viewer
+                            |> Html.map never
+                            |> OutputHtml
                             |> Ok
 
             _ ->
@@ -98,6 +98,29 @@ two firstSelector secondSelector _ output f =
 
             _ ->
                 Err <| OutputError <| "Expected 2 arguments, got " ++ String.fromInt (List.length args)
+two :
+    InSelector a xa
+    -> InSelector b xb
+    -> (a -> b -> o)
+    -> (o -> Html.Html Never)
+    -> (List Value -> Output)
+two firstSelector secondSelector f viewer =
+    \args ->
+        case args of
+            [ firstArg ] ->
+                case firstSelector.fromValue firstArg of
+                    Nothing ->
+                        Err <| OutputError <| "Expected the first argument to be " ++ firstSelector.name ++ ", got " ++ Value.toString firstArg
+
+                    Just first ->
+                        f first
+                            |> viewer
+                            |> Html.map never
+                            |> OutputHtml
+                            |> Ok
+
+            _ ->
+                Err <| OutputError <| "Expected 1 argument, got " ++ String.fromInt (List.length args)
 
 
 three :
@@ -176,12 +199,3 @@ four firstSelector secondSelector thirdSelector fourthSelector _ output f =
 
             _ ->
                 Err <| OutputError <| "Expected 4 arguments, got " ++ String.fromInt (List.length args)
-
-
-html : OutSelector (Html.Html msg) {}
-html =
-    { fromValue =
-        \value ->
-            Kernel.html.fromValue value |> Maybe.map Kernel.Html.htmlToReal
-    , name = "Html.Html"
-    }

@@ -399,6 +399,24 @@ getHostText fullSource functions constants =
                     )
                 |> Maybe.withDefault []
 
+        viewers : IdDict TypeName Function
+        viewers =
+            functions
+                |> IdDict.filterMapGeneric
+                    (\functionName function ->
+                        if List.length function.pairs == 1 then
+                            case List.head function.pairs of
+                                Just ( _, TypeName typeName ) ->
+                                    Just ( typeName, function )
+
+                                Nothing ->
+                                    Nothing
+
+                        else
+                            Nothing
+                    )
+                    (\(TypeName typeName) -> typeName)
+
         fileListDeclaration : Elm.Declaration
         fileListDeclaration =
             (declarations

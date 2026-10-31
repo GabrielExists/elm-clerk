@@ -47,6 +47,29 @@ filterMap func (IdDict dict transform) =
         transform
 
 
+filterMapGeneric : (String -> a -> Maybe ( String, b )) -> (kb -> String) -> IdDict ka a -> IdDict kb b
+filterMapGeneric func transform (IdDict dict _) =
+    IdDict
+        (Dict.foldl
+            (\k v acc ->
+                case func k v of
+                    Just ( newKey, newValue ) ->
+                        case Dict.get newKey acc of
+                            Nothing ->
+                                Dict.insert newKey newValue acc
+
+                            Just _ ->
+                                acc
+
+                    Nothing ->
+                        acc
+            )
+            Dict.empty
+            dict
+        )
+        transform
+
+
 clear : IdDict kind value -> IdDict kind v
 clear (IdDict _ transform) =
     IdDict Dict.empty transform
