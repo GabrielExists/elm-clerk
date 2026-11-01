@@ -3,8 +3,14 @@ module Types exposing (..)
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
 import Element exposing (Element)
+import Elm.Dependency
+import Elm.Docs
+import Elm.Package
+import Elm.Project
 import Elm.Syntax.Declaration exposing (Declaration)
 import Elm.Syntax.Node exposing (Node)
+import Elm.TypeInference
+import Elm.Version
 import FastDict as Dict exposing (Dict)
 import Html exposing (Html)
 import Http
@@ -29,6 +35,11 @@ type alias FrontendModel =
     , viewers : List Viewer
     , outputs : IdDict FunctionName Output
     , runOnHost : Bool
+    , depMainProject : Maybe Elm.Project.ApplicationInfo
+    , depNames : List DependencyName
+    , depProjects : IdDict DependencyName Elm.Project.Project
+    , depDocs : IdDict DependencyName (List Elm.Docs.Module)
+    , depInferenceProject : Maybe Elm.TypeInference.Project
     }
 
 
@@ -51,6 +62,18 @@ type alias Function =
     , declaration : Declaration
     , pairs : List ( ParameterName, TypeName )
     , return : TypeName
+    }
+
+
+type alias DependencyName =
+    ( Elm.Package.Name, Elm.Version.Version )
+
+
+type alias DependencyRequest =
+    { name : DependencyName
+    , combinedName : String
+    , projectCmd : Cmd FrontendMsg
+    , docsCmd : Cmd FrontendMsg
     }
 
 
@@ -156,8 +179,11 @@ type FrontendMsg
     | NoOpFrontendMsg
     | GotList (Result Http.Error (List String))
     | Open4FetchedFile (Result Http.Error String)
-    | Open8FetchedDefaults (Result Http.Error String)
-    | Open9WroteHost (Result Http.Error ())
+    | Open8FetchedElmJson (Result Http.Error Elm.Project.Project)
+    | Open9FetchedDepProject DependencyName (Result Http.Error Elm.Project.Project)
+    | Open10FetchedDepDoc DependencyName (Result Http.Error (List Elm.Docs.Module))
+    | Open11FetchedDefaults (Result Http.Error String)
+    | Open12WroteHost (Result Http.Error ())
     | ListItemClicked FileName
     | InteractiveUpdated ( FunctionName, ParameterName ) RawInteractiveValue
     | CheckGenerateOutputs

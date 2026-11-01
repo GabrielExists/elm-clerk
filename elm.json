@@ -21,6 +21,7 @@
             "elm/http": "2.0.0",
             "elm/json": "1.1.4",
             "elm/parser": "1.1.0",
+            "elm/project-metadata-utils": "1.0.2",
             "elm/regex": "1.0.0",
             "elm/url": "1.0.0",
             "elm/virtual-dom": "1.0.5",
@@ -35,10 +36,10 @@
             "miniBill/elm-rope": "1.1.1",
             "miniBill/elm-unicode": "1.1.2",
             "rtfeldman/elm-hex": "1.0.0",
+            "stil4m/elm-syntax": "7.3.9",
             "terezka/elm-charts": "5.0.0",
             "the-sett/elm-pretty-printer": "3.3.1",
-            "the-sett/elm-syntax-dsl": "6.0.5",
-            "stil4m/elm-syntax": "7.3.9"
+            "the-sett/elm-syntax-dsl": "6.0.5"
         },
         "indirect": {
             "Chadtech/elm-bool-extra": "2.4.2",
@@ -47,7 +48,6 @@
             "chain-partners/elm-bignum": "1.0.1",
             "danhandrea/elm-time-extra": "1.1.0",
             "elm/file": "1.0.5",
-            "elm/project-metadata-utils": "1.0.2",
             "elm/svg": "1.0.1",
             "elm/time": "1.0.0",
             "elm-community/result-extra": "2.4.0",

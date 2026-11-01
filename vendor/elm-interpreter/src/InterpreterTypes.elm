@@ -54,6 +54,7 @@ type Error
     | EvalError EvalErrorData
     | InferenceProjectError Elm.TypeInference.ProjectError.ProjectError
     | InferenceInferError Elm.TypeInference.InferError.InferError
+    | StringError String
 
 
 type Value

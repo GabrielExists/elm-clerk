@@ -7,38 +7,28 @@ import Browser.Navigation as Nav
 import Chart as C
 import Chart.Attributes as CA
 import Common exposing (notifyIn)
-import DefaultViewers
 import Element exposing (Attribute, Element, clipX, el, fill, height, maximum, paddingEach, paragraph, scrollbarX, scrollbarY, shrink, text, width)
 import Element.Background
 import Element.Border
 import Element.Font as Font
 import Element.Input
 import Element.Lazy
-import Elm
-import Elm.Annotation
-import Elm.Arg
-import Elm.Op
-import Elm.Parser
+import Elm.Docs
+import Elm.Package
 import Elm.Parser.Comments
 import Elm.Parser.Declarations
+import Elm.Project exposing (Project(..))
 import Elm.Syntax.Declaration exposing (Declaration(..))
 import Elm.Syntax.Expression exposing (Expression)
 import Elm.Syntax.File exposing (File)
-import Elm.Syntax.Module as Module
 import Elm.Syntax.Node as Node exposing (Node(..))
-import Elm.Syntax.Pattern exposing (Pattern(..))
-import Elm.Syntax.Range
-import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
-import Elm.ToString
+import Elm.Syntax.TypeAnnotation exposing (TypeAnnotation)
 import Elm.TypeInference
-import Elm.TypeInference.InferError exposing (InferError)
-import Elm.TypeInference.ProjectError exposing (ProjectError)
-import Elm.TypeInference.Type
-import Environment
+import Elm.Version
 import Eval.Expression
 import Eval.Module
-import EvalResult
 import FastDict as Dict exposing (Dict)
+import GetHostText exposing (checkDependencies, combineDependencies, dependencyNameToString, getHostText, makeFile, maybeProject)
 import Hash
 import Host
 import Html
@@ -52,6 +42,7 @@ import Kernel
 import Kernel.Html
 import Lamdera exposing (sendToBackend)
 import List.Extra exposing (Step(..))
+import List.MyExtra
 import Markdown.Parser
 import Markdown.Renderer
 import Markdown.Renderer.ElmUi
@@ -61,10 +52,11 @@ import ParserFast
 import Regex
 import Result.Extra
 import Task
-import ToString exposing (annotationToString, errorToString, evalErrorDataToString, httpErrorToString, patternToString)
-import Types exposing (BackendMsg(..), Cell(..), Code(..), Constant, FileName(..), FrontendModel, FrontendMsg(..), FullCode(..), Function, FunctionName(..), IdDict, Interactives(..), Markdown(..), Output, OutputError(..), OutputValue(..), ParameterName(..), ParsedSection, RawInteractiveValue(..), Section(..), ToBackend(..), ToFrontend(..), TypeName(..), Viewer)
+import ToString exposing (errorToString, evalErrorDataToString, httpErrorToString)
+import Types exposing (BackendMsg(..), Cell(..), Code(..), Constant, DependencyName, DependencyRequest, FileName(..), FrontendModel, FrontendMsg(..), FullCode(..), Function, FunctionName(..), IdDict, Interactives(..), Markdown(..), Output, OutputError(..), OutputValue(..), ParameterName(..), ParsedSection, RawInteractiveValue(..), Section(..), ToBackend(..), ToFrontend(..), TypeName(..), Viewer)
 import UI.Source as Source
 import Url
+import Utilities exposing (extractNameFromDeclaration, extractPatternFromDeclaration)
 import Value
 
 
@@ -109,6 +101,11 @@ init _ key =
       , outputs = IdDict.empty (\(FunctionName functionName) -> functionName)
       , reloadRequests = IdDict.empty (\(FunctionName functionName) -> functionName)
       , runOnHost = True
+      , depMainProject = Nothing
+      , depNames = []
+      , depProjects = IdDict.empty dependencyNameToString
+      , depDocs = IdDict.empty dependencyNameToString
+      , depInferenceProject = Nothing
       }
     , Cmd.batch
         [ Http.get
@@ -152,37 +149,129 @@ update msg model =
                     ( newModel, Cmd.batch [ newCmd, notifyIn CheckGenerateOutputs 100 ] )
 
                 Err error ->
-                    ( { model
-                        | error =
-                            httpErrorToString error
-                      }
-                    , Cmd.none
-                    )
+                    handleHtmlError model error "Open4FetchedFile"
 
-        Open8FetchedDefaults result ->
+        Open8FetchedElmJson result ->
+            case result of
+                Ok project ->
+                    case project of
+                        Elm.Project.Application { elm, dirs, depsDirect, depsIndirect, testDepsDirect, testDepsIndirect } ->
+                            let
+                                --makeUrl : ( Elm.Package.Name, Elm.Version.Version ) -> String
+                                --makeUrl ( name, version ) =
+                                --    "https://package.elm-lang.org/packages/"
+                                --        ++ Elm.Package.toString name
+                                --        ++ "/"
+                                --        ++ Elm.Version.toString version
+                                --        ++ "/docs.json"
+                                makeUrl : ( ( Elm.Package.Name, Elm.Version.Version ), String ) -> String
+                                makeUrl ( ( name, version ), fileName ) =
+                                    "/_x/read/elm-stuff/libraries/"
+                                        ++ Elm.Package.toString name
+                                        ++ "/"
+                                        ++ Elm.Version.toString version
+                                        ++ "/"
+                                        ++ fileName
+
+                                --"docs.json"
+                                makeRequest : DependencyName -> DependencyRequest
+                                makeRequest name =
+                                    { name = name
+                                    , combinedName = dependencyNameToString name
+                                    , projectCmd =
+                                        Http.get
+                                            { url = makeUrl ( name, "elm.json" )
+                                            , expect = Http.expectJson (Open9FetchedDepProject name) Elm.Project.decoder
+                                            }
+                                    , docsCmd =
+                                        Http.get
+                                            { url = makeUrl ( name, "docs.json" )
+                                            , expect = Http.expectJson (Open10FetchedDepDoc name) (Json.Decode.list Elm.Docs.decoder)
+                                            }
+                                    }
+                            in
+                            List.concat [ depsDirect, depsIndirect ]
+                                |> List.map makeRequest
+                                |> List.MyExtra.deduplicateByKey .combinedName
+                                |> (\requests ->
+                                        ( { model | depNames = List.map .name requests }
+                                        , Cmd.batch (List.map .projectCmd requests ++ List.map .docsCmd requests)
+                                        )
+                                   )
+
+                        Elm.Project.Package _ ->
+                            ( { model
+                                | error = "Found an elm.json that was a package, expected this project to be an application"
+                              }
+                            , Cmd.none
+                            )
+
+                Err error ->
+                    handleHtmlError model error "Open8FetchedElmJson"
+
+        Open9FetchedDepProject name result ->
+            case result of
+                Ok newProject ->
+                    let
+                        localModel : FrontendModel
+                        localModel =
+                            { model | depProjects = IdDict.insert name newProject model.depProjects }
+                    in
+                    checkDependencies localModel
+
+                Err error ->
+                    handleHtmlError model error "Open9FetchedDepProject"
+
+        Open10FetchedDepDoc name result ->
+            case result of
+                Ok newDoc ->
+                    let
+                        localModel : FrontendModel
+                        localModel =
+                            { model | depDocs = IdDict.insert name newDoc model.depDocs }
+                    in
+                    checkDependencies localModel
+
+                Err error ->
+                    handleHtmlError model error "Open9FetchedDepProject"
+
+        Open11FetchedDefaults result ->
             case result of
                 Ok defaultViewersText ->
                     case model.source of
                         Just source ->
-                            ( model
-                              --, Cmd.none
-                            , Http.post
-                                { url = "/_x/write/src/Host.elm"
-                                , body = Http.stringBody "application/text" (getHostText source (FullCode defaultViewersText) model.functions model.constants)
-                                , expect = Http.expectWhatever Open9WroteHost
-                                }
-                            )
+                            let
+                                dependenciesResult : Result Error (List Elm.TypeInference.Dependency)
+                                dependenciesResult =
+                                    combineDependencies model.depNames model.depProjects model.depDocs
+
+                                projectResult : Result Error Elm.TypeInference.Project
+                                projectResult =
+                                    Result.andThen (\dependencies -> maybeProject [ source, FullCode defaultViewersText ] dependencies) dependenciesResult
+                            in
+                            case projectResult of
+                                Ok project ->
+                                    ( { model | depInferenceProject = Just project }
+                                      --, Cmd.none
+                                      --)
+                                    , Http.post
+                                        { url = "/_x/write/src/Host.elm"
+                                        , body = Http.stringBody "application/text" (getHostText source (FullCode defaultViewersText) project model.functions model.constants)
+                                        , expect = Http.expectWhatever Open12WroteHost
+                                        }
+                                    )
+
+                                Err error ->
+                                    handleError model error
 
                         Nothing ->
                             ( { model | error = "Requested new source when there was no source yet" }, Cmd.none )
 
                 Err error ->
-                    ( { model
-                        | error =
-                            httpErrorToString error
-                      }
-                    , Cmd.none
-                    )
+                    handleHtmlError model error "Open10FetchedDefaults"
+
+        Open12WroteHost _ ->
+            ( model, Cmd.none )
 
         GotList result ->
             case result of
@@ -198,15 +287,7 @@ update msg model =
                     )
 
                 Err error ->
-                    ( { model
-                        | error =
-                            httpErrorToString error
-                      }
-                    , Cmd.none
-                    )
-
-        Open9WroteHost _ ->
-            ( model, Cmd.none )
+                    handleHtmlError model error "GotList"
 
         ListItemClicked fileName ->
             ( { model
@@ -329,8 +410,8 @@ updateFromBackend msg model =
         Open7RequestHostToFrontend ->
             ( model
             , Http.get
-                { url = "/_x/read/src/DefaultViewers.elm"
-                , expect = Http.expectString Open8FetchedDefaults
+                { url = "/_x/read/elm.json"
+                , expect = Http.expectJson Open8FetchedElmJson Elm.Project.decoder
                 }
             )
 
@@ -370,6 +451,37 @@ requestPage (FileName fileName) =
         }
 
 
+handleHtmlError : FrontendModel -> Http.Error -> String -> ( FrontendModel, Cmd msg )
+handleHtmlError model error comment =
+    ( { model
+        | error =
+            comment
+                ++ ": "
+                ++ httpErrorToString error
+      }
+    , Cmd.none
+    )
+
+
+handleTextError : FrontendModel -> String -> ( FrontendModel, Cmd msg )
+handleTextError model text =
+    ( { model
+        | error =
+            text
+      }
+    , Cmd.none
+    )
+
+
+handleError : FrontendModel -> Error -> ( FrontendModel, Cmd msg )
+handleError model error =
+    ( { model
+        | error = errorToString error
+      }
+    , Cmd.none
+    )
+
+
 
 -- PARSING TEXT INPUT
 
@@ -406,208 +518,6 @@ parseSection (Code source) =
                 )
     in
     ParserFast.run parser source
-
-
-getHostText : FullCode -> FullCode -> IdDict FunctionName Function -> IdDict FunctionName Constant -> String
-getHostText fullSource defaultViewersSource functions constants =
-    let
-        makeViewers source =
-            let
-                maybeFile : Result Error File
-                maybeFile =
-                    makeFile source
-
-                maybeFileName : List String
-                maybeFileName =
-                    maybeFile
-                        |> Result.map .moduleDefinition
-                        |> Result.map Node.value
-                        |> Result.map Module.moduleName
-                        |> Result.withDefault []
-
-                declarations : List String
-                declarations =
-                    Result.toMaybe maybeFile
-                        |> Maybe.map
-                            (\file ->
-                                file
-                                    |> .declarations
-                                    |> List.map Node.value
-                                    |> List.map extractNameFromDeclaration
-                            )
-                        |> Maybe.withDefault []
-
-                createdViewers : IdDict TypeName Elm.Expression
-                createdViewers =
-                    declarations
-                        |> List.filterMap
-                            (\name ->
-                                if String.startsWith "viewer" name then
-                                    case IdDict.get (FunctionName name) functions of
-                                        Just function ->
-                                            case function.pairs of
-                                                [ ( _, typeName ) ] ->
-                                                    Just
-                                                        ( typeName
-                                                        , Elm.value
-                                                            { importFrom = maybeFileName
-                                                            , name = name
-                                                            , annotation = Nothing
-                                                            }
-                                                        )
-
-                                                _ ->
-                                                    Nothing
-
-                                        _ ->
-                                            Nothing
-
-                                else
-                                    Nothing
-                            )
-                        |> IdDict.fromList (\(TypeName typeName) -> typeName)
-            in
-            ( maybeFileName, declarations, createdViewers )
-
-        ( userFileName, userDeclarations, userViewers ) =
-            makeViewers fullSource
-
-        ( _, defaultDeclarations, defaultViewers ) =
-            makeViewers defaultViewersSource
-
-        maybeProject : Result Error Elm.TypeInference.Project
-        maybeProject =
-            makeFile fullSource
-                |> Result.andThen
-                    (\file ->
-                        Elm.TypeInference.empty
-                            |> Elm.TypeInference.addFile file
-                            |> Result.mapError InferenceProjectError
-                    )
-
-        allTypes : Result Error (List String)
-        allTypes =
-            maybeProject
-                |> Result.andThen
-                    (\project ->
-                        Elm.TypeInference.getAllTypes userFileName project
-                            |> (\( result, _ ) -> Result.mapError InferenceInferError result)
-                            |> Result.map
-                                (\items ->
-                                    items
-                                        |> List.map (\( _, typeObject ) -> Elm.TypeInference.Type.toString typeObject)
-                                )
-                    )
-
-        viewers : IdDict TypeName Elm.Expression
-        viewers =
-            IdDict.overwrite defaultViewers userViewers
-
-        fileListDeclaration : Elm.Declaration
-        fileListDeclaration =
-            (userDeclarations
-                |> List.filterMap
-                    (\name ->
-                        --Elm.fnBuilder
-                        --    (\arg1 arg2 ->
-                        --        Elm.Op.plus arg1 arg2
-                        --    )
-                        --    |> Elm.fnArg (Elm.Arg.var "arg1")
-                        --    |> Elm.fnArg (Elm.Arg.var "arg2")
-                        --    |> Elm.fnDone
-                        case ( IdDict.get (FunctionName name) functions, IdDict.get (FunctionName name) constants ) of
-                            ( Just function, _ ) ->
-                                Just <|
-                                    Elm.tuple (Elm.string name)
-                                        (Elm.apply
-                                            (getCombinerFromNumArgs (List.length function.pairs))
-                                            ((function.pairs
-                                                |> List.map
-                                                    (\pair ->
-                                                        Boundary.getSelectorFromTypeName (Tuple.second pair)
-                                                    )
-                                             )
-                                                ++ [ Elm.value
-                                                        { importFrom = userFileName
-                                                        , name = name
-                                                        , annotation = Nothing
-                                                        }
-                                                   , Boundary.getViewerFromTypeName viewers function.return
-                                                   ]
-                                            )
-                                        )
-
-                            ( _, Just (Types.Constant returnValue) ) ->
-                                Just <|
-                                    Elm.tuple (Elm.string name)
-                                        (Elm.apply
-                                            (Elm.value
-                                                { importFrom = [ "HostFunctions" ]
-                                                , name = "constant"
-                                                , annotation = Just Elm.Annotation.int -- I need to add this somewhere in order for it to not generate an (incorrect) type signature
-                                                }
-                                            )
-                                            [ Elm.value
-                                                { importFrom = userFileName
-                                                , name = name
-                                                , annotation = Nothing
-                                                }
-                                            , Boundary.getViewerFromTypeName viewers returnValue
-                                            ]
-                                        )
-
-                            ( _, _ ) ->
-                                Nothing
-                    )
-            )
-                |> Elm.list
-                |> Elm.declaration "functionList"
-
-        (FullCode defaultViewersText) =
-            defaultViewersSource
-    in
-    --Elm.file [ "My", "Module" ]
-    --    [ Elm.declaration "placeholder"
-    --        (Elm.string "a fancy string!")
-    --    ]
-    Elm.file [ "Host" ] [ fileListDeclaration ]
-        |> .contents
-        |> (\contents ->
-                contents
-                    ++ "\n\n{-\n"
-                    ++ defaultViewersText
-                    ++ "\n\n"
-                    ++ String.join "\n" defaultDeclarations
-                    ++ "\n\n"
-                    ++ String.join "\n" (IdDict.toList viewers |> List.map (\( key, value ) -> key ++ ", " ++ Elm.toString value))
-                    ++ "-}"
-           )
-
-
-getCombinerFromNumArgs numArgs =
-    Elm.value
-        { importFrom = [ "HostFunctions" ]
-        , name =
-            case numArgs of
-                0 ->
-                    "constant"
-
-                1 ->
-                    "one"
-
-                2 ->
-                    "two"
-
-                3 ->
-                    "three"
-
-                4 ->
-                    "four"
-
-                _ ->
-                    "tooManyArguments"
-        , annotation = Just Elm.Annotation.int -- I need to add this somewhere in order for it to not generate an (incorrect) type signature
-        }
 
 
 
@@ -876,16 +786,6 @@ makeConstant functionName declaration =
         |> Maybe.map (\typeName -> ( functionName, Types.Constant typeName ))
 
 
-makeFile : FullCode -> Result Error Elm.Syntax.File.File
-makeFile (FullCode source) =
-    let
-        file : Result (List DeadEnd) File
-        file =
-            Elm.Parser.parseToFile source
-    in
-    Result.mapError ParsingError file
-
-
 
 -- EVALUATION
 
@@ -1081,49 +981,6 @@ evaluate maybeEnv expressionNode =
                     Result.mapError InterpreterTypes.EvalError result
     in
     moduleRun |> Result.mapError errorToString |> Result.mapError OutputError
-
-
-
--- UTILITIES
-
-
-extractNameFromDeclaration : Declaration -> String
-extractNameFromDeclaration declaration =
-    case declaration of
-        FunctionDeclaration function ->
-            function
-                |> .declaration
-                |> Node.value
-                |> .name
-                |> Node.value
-
-        AliasDeclaration _ ->
-            "typealias"
-
-        CustomTypeDeclaration _ ->
-            "customtype"
-
-        PortDeclaration _ ->
-            "portdeclaration"
-
-        InfixDeclaration _ ->
-            "infixdeclaration"
-
-        Destructuring _ _ ->
-            "destructuring"
-
-
-extractPatternFromDeclaration : Declaration -> List (Node Pattern)
-extractPatternFromDeclaration declaration =
-    case declaration of
-        FunctionDeclaration function ->
-            function
-                |> .declaration
-                |> Node.value
-                |> .arguments
-
-        _ ->
-            []
 
 
 

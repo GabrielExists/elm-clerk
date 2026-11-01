@@ -85,6 +85,9 @@ errorToString err =
         InferenceInferError inferError ->
             Elm.TypeInference.InferError.toString inferError
 
+        StringError string ->
+            string
+
 
 evalErrorToString : EvalErrorData -> String
 evalErrorToString { callStack, error } =

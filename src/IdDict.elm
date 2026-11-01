@@ -66,3 +66,8 @@ filterMap func (IdDict dict transform) =
 clear : IdDict kind value -> IdDict kind v
 clear (IdDict _ transform) =
     IdDict Dict.empty transform
+
+
+size : IdDict kind value -> Int
+size (IdDict dict _) =
+    Dict.size dict
