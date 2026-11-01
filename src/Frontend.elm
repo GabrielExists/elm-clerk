@@ -572,7 +572,16 @@ getHostText fullSource defaultViewersSource functions constants =
     --    ]
     Elm.file [ "Host" ] [ fileListDeclaration ]
         |> .contents
-        |> (\contents -> contents ++ "\n\n{-\n" ++ defaultViewersText ++ "\n\n" ++ String.join "\n" defaultDeclarations ++ "\n\n" ++ String.join "\n" (IdDict.toList defaultViewers |> List.map (\( key, value ) -> key ++ ", " ++ Elm.toString value)) ++ "-}")
+        |> (\contents ->
+                contents
+                    ++ "\n\n{-\n"
+                    ++ defaultViewersText
+                    ++ "\n\n"
+                    ++ String.join "\n" defaultDeclarations
+                    ++ "\n\n"
+                    ++ String.join "\n" (IdDict.toList viewers |> List.map (\( key, value ) -> key ++ ", " ++ Elm.toString value))
+                    ++ "-}"
+           )
 
 
 getCombinerFromNumArgs numArgs =
