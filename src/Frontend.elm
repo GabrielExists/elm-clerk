@@ -297,6 +297,11 @@ update msg model =
             , sendToBackend (Open1FilenameToBackend fileName)
             )
 
+        ForceRefreshHost ->
+            ( model
+            , fetchMainElmJson
+            )
+
         InteractiveUpdated names value ->
             let
                 newInteractives : Interactives
@@ -409,10 +414,7 @@ updateFromBackend msg model =
 
         Open7RequestHostToFrontend ->
             ( model
-            , Http.get
-                { url = "/_x/read/elm.json"
-                , expect = Http.expectJson Open8FetchedElmJson Elm.Project.decoder
-                }
+            , fetchMainElmJson
             )
 
         Open3RequestLoadToFrontend fileName ->
@@ -448,6 +450,14 @@ requestPage (FileName fileName) =
     Http.get
         { url = "/_x/read/pages/" ++ fileName
         , expect = Http.expectString Open4FetchedFile
+        }
+
+
+fetchMainElmJson : Cmd FrontendMsg
+fetchMainElmJson =
+    Http.get
+        { url = "/_x/read/elm.json"
+        , expect = Http.expectJson Open8FetchedElmJson Elm.Project.decoder
         }
 
 
@@ -563,10 +573,6 @@ evaluateSections runOnHost source maybeEnv =
         viewerSelector =
             Kernel.listIn (Kernel.function Eval.Expression.evalFunction Kernel.anything Kernel.to (Kernel.maybe Kernel.html))
 
-        viewersValue : Result OutputError Value
-        viewersValue =
-            evaluateName maybeEnv (FunctionName "viewers")
-
         transformValue : (Value -> InterpreterTypes.Config -> Env -> InterpreterTypes.EvalResult (Maybe Kernel.Html.Html)) -> Viewer
         transformValue func =
             case maybeEnv of
@@ -584,30 +590,6 @@ evaluateSections runOnHost source maybeEnv =
                             |> Result.mapError evalErrorDataToString
                             |> Result.mapError OutputError
                             |> Result.map (\maybe -> Maybe.map Kernel.Html.htmlToReal maybe)
-
-        viewers : List Viewer
-        viewers =
-            viewersValue
-                |> Result.toMaybe
-                |> Maybe.andThen viewerSelector.fromValue
-                |> Maybe.withDefault []
-                |> List.map transformValue
-
-        viewersError : Maybe OutputError
-        viewersError =
-            case viewersValue of
-                Ok _ ->
-                    Nothing
-
-                Err (OutputError error) ->
-                    -- This exact error means that the user has not supplied a "viewers" at all
-                    -- That's okay, they don't need to! We just want to let them know why their
-                    -- viewers are funky if they do expect them to show up
-                    if String.startsWith "NameError: " error && String.endsWith "viewers" error then
-                        Nothing
-
-                    else
-                        Just (OutputError error)
 
         ( evaluatedSections, functions, constants ) =
             parseSections source
@@ -642,12 +624,7 @@ evaluateSections runOnHost source maybeEnv =
                     , IdDict.empty (\(FunctionName functionName) -> functionName)
                     )
     in
-    case viewersError of
-        Just error ->
-            ( viewers, ErrorSection [ OutputError "\"viewers\" failed to evaluate:", error ] :: evaluatedSections, ( functions, constants ) )
-
-        Nothing ->
-            ( viewers, evaluatedSections, ( functions, constants ) )
+    ( [], evaluatedSections, ( functions, constants ) )
 
 
 evaluateSection : Bool -> Result Error Env -> ( Code, Result error (List Cell) ) -> ( Section, Maybe ( FunctionName, Function ), Maybe ( FunctionName, Constant ) )
@@ -1022,6 +999,7 @@ view model =
                             |> Element.el [ Element.paddingXY 0 4 ]
                             |> List.singleton
                        )
+                    ++ [ Element.Input.button [] { onPress = Just ForceRefreshHost, label = Element.text "Force refresh of host functions." } ]
                     ++ (if overrideAlwaysHost then
                             []
 

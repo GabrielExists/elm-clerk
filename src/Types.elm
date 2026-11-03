@@ -185,6 +185,7 @@ type FrontendMsg
     | Open11FetchedDefaults (Result Http.Error String)
     | Open12WroteHost (Result Http.Error ())
     | ListItemClicked FileName
+    | ForceRefreshHost
     | InteractiveUpdated ( FunctionName, ParameterName ) RawInteractiveValue
     | CheckGenerateOutputs
     | ReloadFunction FunctionName Int
