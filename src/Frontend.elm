@@ -194,7 +194,7 @@ update msg model =
                                 |> List.map makeRequest
                                 |> List.MyExtra.deduplicateByKey .combinedName
                                 |> (\requests ->
-                                        ( { model | depNames = List.map .name requests }
+                                        ( { model | depNames = List.map .name requests, depDocs = IdDict.clear model.depDocs, depProjects = IdDict.clear model.depProjects }
                                         , Cmd.batch (List.map .projectCmd requests ++ List.map .docsCmd requests)
                                         )
                                    )
@@ -298,9 +298,7 @@ update msg model =
             )
 
         ForceRefreshHost ->
-            ( model
-            , fetchMainElmJson
-            )
+            fetchMainElmJson model
 
         InteractiveUpdated names value ->
             let
@@ -413,9 +411,7 @@ updateFromBackend msg model =
             )
 
         Open7RequestHostToFrontend ->
-            ( model
-            , fetchMainElmJson
-            )
+            fetchMainElmJson model
 
         Open3RequestLoadToFrontend fileName ->
             ( model
@@ -453,12 +449,14 @@ requestPage (FileName fileName) =
         }
 
 
-fetchMainElmJson : Cmd FrontendMsg
-fetchMainElmJson =
-    Http.get
+fetchMainElmJson : FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
+fetchMainElmJson model =
+    ( model
+    , Http.get
         { url = "/_x/read/elm.json"
         , expect = Http.expectJson Open8FetchedElmJson Elm.Project.decoder
         }
+    )
 
 
 handleHtmlError : FrontendModel -> Http.Error -> String -> ( FrontendModel, Cmd msg )
