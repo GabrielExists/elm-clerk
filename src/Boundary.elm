@@ -5,7 +5,7 @@ import Element.Font as Font
 import Element.Input
 import Elm
 import Elm.Syntax.Declaration exposing (Declaration(..))
-import Elm.Syntax.Node as Node
+import Elm.Syntax.Node as Node exposing (Node)
 import Elm.Syntax.Pattern exposing (Pattern(..))
 import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
 import FastDict as Dict exposing (Dict)
@@ -86,7 +86,7 @@ getSelectorFromTypeName (TypeName typeName) =
                 _ ->
                     Elm.value
                         { importFrom = [ "Kernel" ]
-                        , name = "unknown"
+                        , name = "unknown (" ++ typeName ++ ")"
                         , annotation = Nothing
                         }
 
@@ -263,6 +263,21 @@ parseTogether patterns declaration numApplied =
             )
 
 
+parseTogetherFromAnnotations : List Pattern -> List TypeAnnotation -> Result OutputError ( List ( ParameterName, TypeName ), TypeName )
+parseTogetherFromAnnotations patterns ann =
+    List.map2 Tuple.pair patterns ann
+        |> Result.Extra.combineMap parseTogetherSingle
+        |> Result.map List.concat
+        |> Result.andThen
+            (\list ->
+                list
+                    |> List.Extra.last
+                    |> Result.fromMaybe (OutputError "No last part of annotation")
+                    |> Result.map Tuple.second
+                    |> Result.map (\returnType -> ( list, returnType ))
+            )
+
+
 parseTogetherSingle : ( Pattern, TypeAnnotation ) -> Result OutputError (List ( ParameterName, TypeName ))
 parseTogetherSingle ( pattern, annotation ) =
     case ( pattern, annotation ) of
@@ -276,7 +291,7 @@ parseTogetherSingle ( pattern, annotation ) =
         --(UnConsPattern head rest, TypeAnnotation. )->
         --ListPattern (List (Node Pattern))
         --VarPattern String
-        ( VarPattern binding, TypeAnnotation.Typed moduleNode patterns ) ->
+        ( VarPattern binding, TypeAnnotation.Typed moduleNode annotations ) ->
             let
                 typeName : String
                 typeName =
@@ -288,7 +303,7 @@ parseTogetherSingle ( pattern, annotation ) =
                 fullTypeName : String
                 fullTypeName =
                     typeName
-                        :: (patterns
+                        :: (annotations
                                 |> List.map Node.value
                                 |> List.map annotationToString
                            )
@@ -339,6 +354,19 @@ declarationTypeAnnotation declaration =
 
         _ ->
             Err (OutputError "Not a function declaration")
+
+
+declarationPatterns : Declaration -> List (Node Pattern)
+declarationPatterns declaration =
+    case declaration of
+        FunctionDeclaration function ->
+            function
+                |> .declaration
+                |> Node.value
+                |> .arguments
+
+        _ ->
+            []
 
 
 bigAnnotationToList : TypeAnnotation -> List TypeAnnotation

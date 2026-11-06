@@ -256,7 +256,7 @@ update msg model =
                                       --)
                                     , Http.post
                                         { url = "/_x/write/src/Host.elm"
-                                        , body = Http.stringBody "application/text" (getHostText source (FullCode defaultViewersText) project model.functions model.constants)
+                                        , body = Http.stringBody "application/text" (getHostText source (FullCode defaultViewersText) project)
                                         , expect = Http.expectWhatever Open12WroteHost
                                         }
                                     )

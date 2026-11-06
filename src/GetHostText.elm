@@ -8,9 +8,12 @@ import Elm.Docs exposing (Module)
 import Elm.Package
 import Elm.Parser
 import Elm.Project exposing (Project(..))
+import Elm.Syntax.Declaration exposing (Declaration)
 import Elm.Syntax.File exposing (File)
 import Elm.Syntax.Module as Module
 import Elm.Syntax.Node as Node exposing (Node(..))
+import Elm.Syntax.Pattern exposing (Pattern)
+import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
 import Elm.TypeInference
 import Elm.TypeInference.Type
 import Elm.Version
@@ -24,7 +27,7 @@ import Types exposing (BackendMsg(..), Cell(..), Code(..), Constant, DependencyN
 import Utilities exposing (extractNameFromDeclarationNode)
 
 
-makeViewers : FullCode -> Elm.TypeInference.Project -> Result Error ( List String, List (Node String), IdDict TypeName Elm.Expression )
+makeViewers : FullCode -> Elm.TypeInference.Project -> Result Error ( List String, List (Node Declaration), IdDict TypeName Elm.Expression )
 makeViewers source project =
     let
         maybeFile : Result Error File
@@ -39,15 +42,13 @@ makeViewers source project =
                 |> Result.map Module.moduleName
                 |> Result.withDefault []
 
-        declarations : List (Node String)
+        declarations : List (Node Declaration)
         declarations =
             Result.toMaybe maybeFile
                 |> Maybe.map
                     (\file ->
                         file
                             |> .declarations
-                            |> List.map Node.value
-                            |> List.filterMap extractNameFromDeclarationNode
                     )
                 |> Maybe.withDefault []
 
@@ -118,6 +119,8 @@ makeViewers source project =
         result : Result Error (IdDict TypeName Elm.Expression)
         result =
             declarations
+                |> List.map Node.value
+                |> List.filterMap extractNameFromDeclarationNode
                 |> List.foldr
                     foldy
                     (IdDict.empty (\(TypeName typeName) -> typeName) |> Ok)
@@ -130,8 +133,8 @@ makeViewers source project =
             Err error
 
 
-getHostText : FullCode -> FullCode -> Elm.TypeInference.Project -> IdDict FunctionName Function -> IdDict FunctionName Constant -> String
-getHostText fullSource defaultViewersSource project functions constants =
+getHostText : FullCode -> FullCode -> Elm.TypeInference.Project -> String
+getHostText fullSource defaultViewersSource project =
     let
         fileList =
             case ( makeViewers fullSource project, makeViewers defaultViewersSource project ) of
@@ -145,57 +148,58 @@ getHostText fullSource defaultViewersSource project functions constants =
                         fileListDeclaration =
                             (userDeclarations
                                 |> List.filterMap
-                                    (\(Node _ name) ->
-                                        --Elm.fnBuilder
-                                        --    (\arg1 arg2 ->
-                                        --        Elm.Op.plus arg1 arg2
-                                        --    )
-                                        --    |> Elm.fnArg (Elm.Arg.var "arg1")
-                                        --    |> Elm.fnArg (Elm.Arg.var "arg2")
-                                        --    |> Elm.fnDone
-                                        case ( IdDict.get (FunctionName name) functions, IdDict.get (FunctionName name) constants ) of
-                                            ( Just function, _ ) ->
-                                                Just <|
-                                                    Elm.tuple (Elm.string name)
-                                                        (Elm.apply
-                                                            (getCombinerFromNumArgs (List.length function.pairs))
-                                                            ((function.pairs
-                                                                |> List.map
-                                                                    (\pair ->
-                                                                        Boundary.getSelectorFromTypeName (Tuple.second pair)
-                                                                    )
-                                                             )
-                                                                ++ [ Elm.value
-                                                                        { importFrom = userFileName
-                                                                        , name = name
-                                                                        , annotation = Nothing
-                                                                        }
-                                                                   , Boundary.getViewerFromTypeName viewers function.return
-                                                                   ]
-                                                            )
-                                                        )
-
-                                            ( _, Just (Types.Constant returnValue) ) ->
-                                                Just <|
-                                                    Elm.tuple (Elm.string name)
-                                                        (Elm.apply
-                                                            (Elm.value
-                                                                { importFrom = [ "HostFunctions" ]
-                                                                , name = "constant"
-                                                                , annotation = Just Elm.Annotation.int -- I need to add this somewhere in order for it to not generate an (incorrect) type signature
-                                                                }
-                                                            )
-                                                            [ Elm.value
-                                                                { importFrom = userFileName
-                                                                , name = name
-                                                                , annotation = Nothing
-                                                                }
-                                                            , Boundary.getViewerFromTypeName viewers returnValue
-                                                            ]
-                                                        )
-
-                                            ( _, _ ) ->
+                                    (\declaration ->
+                                        case declaration |> Node.value |> extractNameFromDeclarationNode of
+                                            Nothing ->
                                                 Nothing
+
+                                            Just (Node range name) ->
+                                                case Elm.TypeInference.getType userFileName range project |> Tuple.first of
+                                                    Err _ ->
+                                                        Nothing
+
+                                                    Ok inferredType ->
+                                                        let
+                                                            --annotations : List TypeAnnotation
+                                                            --annotations =
+                                                            --Debug.log "Elm.TypeInference.Type.toTypeAnnotation inferredType" (Elm.TypeInference.Type.toTypeAnnotation inferredType)
+                                                            --    |> Boundary.bigAnnotationToList
+                                                            patterns : List (Node Pattern)
+                                                            patterns =
+                                                                declaration
+                                                                    |> Node.value
+                                                                    |> Boundary.declarationPatterns
+
+                                                            maybePairs : Result OutputError ( List ( ParameterName, TypeName ), TypeName )
+                                                            maybePairs =
+                                                                Boundary.parseTogetherFromAnnotations (patterns |> List.map Node.value) (patterns |> List.map (\_ -> TypeAnnotation.Typed (Node.empty ( [ "Basics" ], "Float" )) []))
+
+                                                            --annotations
+                                                        in
+                                                        case maybePairs of
+                                                            Ok ( pairs, return ) ->
+                                                                Elm.tuple (Elm.string name)
+                                                                    (Elm.apply
+                                                                        (getCombinerFromNumArgs (List.length pairs))
+                                                                        ((pairs
+                                                                            |> List.map
+                                                                                (\pair ->
+                                                                                    Boundary.getSelectorFromTypeName (Tuple.second pair)
+                                                                                )
+                                                                         )
+                                                                            ++ [ Elm.value
+                                                                                    { importFrom = userFileName
+                                                                                    , name = name
+                                                                                    , annotation = Nothing
+                                                                                    }
+                                                                               , Boundary.getViewerFromTypeName viewers return
+                                                                               ]
+                                                                        )
+                                                                    )
+                                                                    |> Just
+
+                                                            _ ->
+                                                                Nothing
                                     )
                             )
                                 |> Elm.list

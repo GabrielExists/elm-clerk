@@ -19,7 +19,7 @@ functionList =
     []
 
 """
-POLL_PERIOD = 4
+POLL_PERIOD = 8
 
 def main():
     print("Starting lamdera")
