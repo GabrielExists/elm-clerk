@@ -24,71 +24,77 @@ import Value
 -- This is helping generating glue for host code, the boundary between elm-clerk main code and the pages
 
 
-getSelectorFromTypeName : TypeName -> Elm.Expression
+getSelectorFromTypeName : TypeName -> Result String Elm.Expression
 getSelectorFromTypeName (TypeName typeName) =
     case typeName of
-        "Bool" ->
+        "Basics.Bool" ->
             Elm.value
                 { importFrom = [ "Kernel" ]
                 , name = "bool"
                 , annotation = Nothing
                 }
+                |> Ok
 
-        "Char" ->
+        "Basics.Char" ->
             Elm.value
                 { importFrom = [ "Kernel" ]
                 , name = "char"
                 , annotation = Nothing
                 }
+                |> Ok
 
-        "Int" ->
+        "Basics.Int" ->
             Elm.value
                 { importFrom = [ "Kernel" ]
                 , name = "int"
                 , annotation = Nothing
                 }
+                |> Ok
 
-        "Float" ->
+        "Basics.Float" ->
             Elm.value
                 { importFrom = [ "Kernel" ]
                 , name = "float"
                 , annotation = Nothing
                 }
+                |> Ok
 
-        "String" ->
+        "String.String" ->
             Elm.value
                 { importFrom = [ "Kernel" ]
                 , name = "string"
                 , annotation = Nothing
                 }
+                |> Ok
 
-        "Html msg" ->
+        "Html.Html msg" ->
             Elm.value
                 { importFrom = [ "Kernel" ]
                 , name = "html"
                 , annotation = Nothing
                 }
+                |> Ok
 
         _ ->
             case removeStartsWith "List " typeName of
                 Just inner ->
-                    Elm.apply
-                        (Elm.value
-                            { importFrom = [ "Kernel" ]
-                            , name = "list"
-                            , annotation = Nothing
-                            }
-                        )
-                        [ getSelectorFromTypeName
-                            (TypeName inner)
-                        ]
+                    getSelectorFromTypeName
+                        (TypeName inner)
+                        |> Result.map
+                            (\innerType ->
+                                Elm.apply
+                                    (Elm.value
+                                        { importFrom = [ "Kernel" ]
+                                        , name = "list"
+                                        , annotation = Nothing
+                                        }
+                                    )
+                                    [ innerType
+                                    ]
+                            )
 
                 _ ->
-                    Elm.value
-                        { importFrom = [ "Kernel" ]
-                        , name = "unknown (" ++ typeName ++ ")"
-                        , annotation = Nothing
-                        }
+                    Err typeName
 
 
 getViewerFromTypeName : IdDict TypeName Elm.Expression -> TypeName -> Elm.Expression
@@ -281,11 +287,10 @@ parseTogetherFromAnnotations patterns ann =
 parseTogetherSingle : ( Pattern, TypeAnnotation ) -> Result OutputError (List ( ParameterName, TypeName ))
 parseTogetherSingle ( pattern, annotation ) =
     case ( pattern, annotation ) of
-        ( TuplePattern patterns, TypeAnnotation.Tupled annotations ) ->
-            List.map2 Tuple.pair (patterns |> List.map Node.value) (annotations |> List.map Node.value)
-                |> Result.Extra.combineMap parseTogetherSingle
-                |> Result.map List.concat
-
+        --( TuplePattern patterns, TypeAnnotation.Tupled annotations ) ->
+        --    List.map2 Tuple.pair (patterns |> List.map Node.value) (annotations |> List.map Node.value)
+        --        |> Result.Extra.combineMap parseTogetherSingle
+        --        |> Result.map List.concat
         --( RecordPattern patterns, TypeAnnotation.Record record ) ->
         --    Err "record not implemented"
         --(UnConsPattern head rest, TypeAnnotation. )->
@@ -371,7 +376,7 @@ declarationPatterns declaration =
 
 bigAnnotationToList : TypeAnnotation -> List TypeAnnotation
 bigAnnotationToList annotation =
-    case annotation of
+    case Debug.log "annotation" annotation of
         TypeAnnotation.FunctionTypeAnnotation first second ->
             (first
                 |> Node.value

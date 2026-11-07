@@ -32,7 +32,7 @@ doubleTwice x =
     double (double x)
 
 
-convertThing ( banana, multiplier ) =
+convertThing banana multiplier =
     String.length banana * multiplier
 
 

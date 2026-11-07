@@ -87,7 +87,8 @@ makeViewers source project =
                                 case
                                     ( inferredType
                                         |> getFunctionInput
-                                        |> Maybe.map Elm.TypeInference.Type.toString
+                                        |> Maybe.map Elm.TypeInference.Type.toTypeAnnotation
+                                        |> Maybe.map ToString.annotationToString
                                         |> Maybe.map TypeName
                                     , returnTypeIsHtml inferredType
                                     )
@@ -160,10 +161,15 @@ getHostText fullSource defaultViewersSource project =
 
                                                     Ok inferredType ->
                                                         let
-                                                            --annotations : List TypeAnnotation
-                                                            --annotations =
-                                                            --Debug.log "Elm.TypeInference.Type.toTypeAnnotation inferredType" (Elm.TypeInference.Type.toTypeAnnotation inferredType)
-                                                            --    |> Boundary.bigAnnotationToList
+                                                            inferredTypeType : Elm.TypeInference.Type.Type
+                                                            inferredTypeType =
+                                                                inferredType
+
+                                                            annotations : List TypeAnnotation
+                                                            annotations =
+                                                                Elm.TypeInference.Type.toTypeAnnotation (Debug.log "Start annotation" inferredType)
+                                                                    |> Boundary.bigAnnotationToList
+
                                                             patterns : List (Node Pattern)
                                                             patterns =
                                                                 declaration
@@ -172,34 +178,11 @@ getHostText fullSource defaultViewersSource project =
 
                                                             maybePairs : Result OutputError ( List ( ParameterName, TypeName ), TypeName )
                                                             maybePairs =
-                                                                Boundary.parseTogetherFromAnnotations (patterns |> List.map Node.value) (patterns |> List.map (\_ -> TypeAnnotation.Typed (Node.empty ( [ "Basics" ], "Float" )) []))
+                                                                Boundary.parseTogetherFromAnnotations (patterns |> List.map Node.value) annotations
 
                                                             --annotations
                                                         in
-                                                        case maybePairs of
-                                                            Ok ( pairs, return ) ->
-                                                                Elm.tuple (Elm.string name)
-                                                                    (Elm.apply
-                                                                        (getCombinerFromNumArgs (List.length pairs))
-                                                                        ((pairs
-                                                                            |> List.map
-                                                                                (\pair ->
-                                                                                    Boundary.getSelectorFromTypeName (Tuple.second pair)
-                                                                                )
-                                                                         )
-                                                                            ++ [ Elm.value
-                                                                                    { importFrom = userFileName
-                                                                                    , name = name
-                                                                                    , annotation = Nothing
-                                                                                    }
-                                                                               , Boundary.getViewerFromTypeName viewers return
-                                                                               ]
-                                                                        )
-                                                                    )
-                                                                    |> Just
-
-                                                            _ ->
-                                                                Nothing
+                                                        selectorsAndMissing maybePairs name userFileName viewers
                                     )
                             )
                                 |> Elm.list
@@ -225,6 +208,46 @@ getHostText fullSource defaultViewersSource project =
         |> .contents
 
 
+selectorsAndMissing : Result error ( List ( a, TypeName ), TypeName ) -> String -> List String -> IdDict TypeName Elm.Expression -> Maybe Elm.Expression
+selectorsAndMissing maybePairs name userFileName viewers =
+    case maybePairs of
+        Ok ( pairs, return ) ->
+            let
+                selectorsResult : Result String (List Elm.Expression)
+                selectorsResult =
+                    pairs
+                        |> List.map
+                            (\pair ->
+                                Boundary.getSelectorFromTypeName (Tuple.second pair)
+                            )
+                        |> Result.Extra.combine
+            in
+            case selectorsResult of
+                Ok selectors ->
+                    Elm.tuple (Elm.string name)
+                        (Elm.apply
+                            (getCombinerFromNumArgs
+                                (List.length pairs)
+                            )
+                            (selectors
+                                ++ [ Elm.value
+                                        { importFrom = userFileName
+                                        , name = name
+                                        , annotation = Nothing
+                                        }
+                                   , Boundary.getViewerFromTypeName viewers return
+                                   ]
+                            )
+                        )
+                        |> Just
+
+                Err missingType ->
+                    Nothing
+
+        _ ->
+            Nothing
+
+
 makeFile : FullCode -> Result Error Elm.Syntax.File.File
 makeFile (FullCode source) =
     let
@@ -235,6 +258,7 @@ makeFile (FullCode source) =
     Result.mapError ParsingError file
 
 
+getCombinerFromNumArgs : Int -> Elm.Expression
 getCombinerFromNumArgs numArgs =
     Elm.value
         { importFrom = [ "HostFunctions" ]
