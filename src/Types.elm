@@ -77,6 +77,10 @@ type alias DependencyRequest =
     }
 
 
+type alias Selection =
+    {}
+
+
 type alias Output =
     Result OutputError OutputValue
 
