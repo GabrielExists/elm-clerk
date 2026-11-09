@@ -53,7 +53,7 @@ import Regex
 import Result.Extra
 import Task
 import ToString exposing (errorToString, evalErrorDataToString, httpErrorToString)
-import Types exposing (BackendMsg(..), Cell(..), Code(..), Constant, DependencyName, DependencyRequest, FileName(..), FrontendModel, FrontendMsg(..), FullCode(..), Function, FunctionName(..), IdDict, Interactives(..), Markdown(..), Output, OutputError(..), OutputValue(..), ParameterName(..), ParsedSection, RawInteractiveValue(..), Section(..), ToBackend(..), ToFrontend(..), TypeName(..), Viewer)
+import Types exposing (BackendMsg(..), Cell(..), Checksum(..), Code(..), Constant, DependencyName, DependencyRequest, FileName(..), FrontendModel, FrontendMsg(..), FullCode(..), Function, FunctionName(..), IdDict, Interactives(..), Markdown(..), Output, OutputError(..), OutputValue(..), ParameterName(..), ParsedSection, RawInteractiveValue(..), Section(..), ToBackend(..), ToFrontend(..), TypeName(..), Viewer)
 import UI.Source as Source
 import Url
 import Utilities exposing (extractNameFromDeclaration, extractPatternFromDeclaration)
@@ -139,7 +139,15 @@ update msg model =
         NoOpFrontendMsg ->
             ( model, Cmd.none )
 
-        Open4FetchedFile result ->
+        Open1FileName fileName ->
+            ( { model
+                | currentFileName = Just fileName
+                , outputs = IdDict.clear model.outputs
+              }
+            , requestPage fileName
+            )
+
+        Open2FetchedFile result ->
             case result of
                 Ok source ->
                     let
@@ -151,7 +159,7 @@ update msg model =
                 Err error ->
                     handleHtmlError model error "Open4FetchedFile"
 
-        Open8FetchedElmJson result ->
+        Open6FetchedElmJson result ->
             case result of
                 Ok project ->
                     case project of
@@ -181,12 +189,12 @@ update msg model =
                                     , projectCmd =
                                         Http.get
                                             { url = makeUrl ( name, "elm.json" )
-                                            , expect = Http.expectJson (Open9FetchedDepProject name) Elm.Project.decoder
+                                            , expect = Http.expectJson (Open7FetchedDepProject name) Elm.Project.decoder
                                             }
                                     , docsCmd =
                                         Http.get
                                             { url = makeUrl ( name, "docs.json" )
-                                            , expect = Http.expectJson (Open10FetchedDepDoc name) (Json.Decode.list Elm.Docs.decoder)
+                                            , expect = Http.expectJson (Open8FetchedDepDoc name) (Json.Decode.list Elm.Docs.decoder)
                                             }
                                     }
                             in
@@ -209,7 +217,7 @@ update msg model =
                 Err error ->
                     handleHtmlError model error "Open8FetchedElmJson"
 
-        Open9FetchedDepProject name result ->
+        Open7FetchedDepProject name result ->
             case result of
                 Ok newProject ->
                     let
@@ -222,7 +230,7 @@ update msg model =
                 Err error ->
                     handleHtmlError model error "Open9FetchedDepProject"
 
-        Open10FetchedDepDoc name result ->
+        Open8FetchedDepDoc name result ->
             case result of
                 Ok newDoc ->
                     let
@@ -235,7 +243,7 @@ update msg model =
                 Err error ->
                     handleHtmlError model error "Open9FetchedDepProject"
 
-        Open11FetchedDefaults result ->
+        Open9FetchedDefaults result ->
             case result of
                 Ok defaultViewersText ->
                     case model.source of
@@ -257,7 +265,7 @@ update msg model =
                                     , Http.post
                                         { url = "/_x/write/src/Host.elm"
                                         , body = Http.stringBody "application/text" (getHostText source (FullCode defaultViewersText) project)
-                                        , expect = Http.expectWhatever Open12WroteHost
+                                        , expect = Http.expectWhatever Open10WroteHost
                                         }
                                     )
 
@@ -270,7 +278,7 @@ update msg model =
                 Err error ->
                     handleHtmlError model error "Open10FetchedDefaults"
 
-        Open12WroteHost _ ->
+        Open10WroteHost result ->
             ( model, Cmd.none )
 
         GotList result ->
@@ -288,14 +296,6 @@ update msg model =
 
                 Err error ->
                     handleHtmlError model error "GotList"
-
-        ListItemClicked fileName ->
-            ( { model
-                | currentFileName = Just fileName
-                , outputs = IdDict.clear model.outputs
-              }
-            , sendToBackend (Open1FilenameToBackend fileName)
-            )
 
         ForceRefreshHost ->
             fetchMainElmJson model
@@ -410,19 +410,14 @@ updateFromBackend msg model =
                 ]
             )
 
-        Open7RequestHostToFrontend ->
+        Open5RequestLoadToFrontend ->
             fetchMainElmJson model
-
-        Open3RequestLoadToFrontend fileName ->
-            ( model
-            , requestPage fileName
-            )
 
 
 updateCurrentChecksum : Model -> ( Model, Cmd FrontendMsg )
 updateCurrentChecksum model =
-    case ( model.source, model.checksum ) of
-        ( Just (FullCode source), Just modelChecksum ) ->
+    case ( model.source, model.checksum, model.currentFileName ) of
+        ( Just (FullCode source), Just (Checksum modelChecksum), Just filename ) ->
             let
                 checksum =
                     source |> Hash.fromString |> Hash.toString
@@ -431,9 +426,9 @@ updateCurrentChecksum model =
                 ( model, Cmd.none )
 
             else
-                ( { model | checksum = Just checksum }
+                ( { model | checksum = Just (Checksum checksum) }
                 , Cmd.batch
-                    [ sendToBackend (Open5ChecksumToBackend checksum)
+                    [ sendToBackend (Open3FilenameChecksumToBackend filename (Checksum checksum))
                     ]
                 )
 
@@ -445,7 +440,7 @@ requestPage : FileName -> Cmd FrontendMsg
 requestPage (FileName fileName) =
     Http.get
         { url = "/_x/read/pages/" ++ fileName
-        , expect = Http.expectString Open4FetchedFile
+        , expect = Http.expectString Open2FetchedFile
         }
 
 
@@ -454,7 +449,7 @@ fetchMainElmJson model =
     ( model
     , Http.get
         { url = "/_x/read/elm.json"
-        , expect = Http.expectJson Open8FetchedElmJson Elm.Project.decoder
+        , expect = Http.expectJson Open6FetchedElmJson Elm.Project.decoder
         }
     )
 
@@ -1058,7 +1053,7 @@ view model =
 viewFileListItem : FileName -> Element FrontendMsg
 viewFileListItem (FileName listItem) =
     Element.Input.button []
-        { onPress = Just (ListItemClicked (FileName listItem))
+        { onPress = Just (Open1FileName (FileName listItem))
         , label = Element.text listItem
         }
 

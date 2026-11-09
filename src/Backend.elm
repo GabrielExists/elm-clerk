@@ -4,7 +4,7 @@ import Common exposing (notifyIn)
 import FastDict as Dict
 import Interactives
 import Lamdera exposing (ClientId, SessionId, sendToFrontend)
-import Types exposing (BackendModel, BackendMsg(..), FileName(..), FrontendMsg(..), ToBackend(..), ToFrontend(..))
+import Types exposing (BackendModel, BackendMsg(..), Checksum(..), FileName(..), FrontendMsg(..), ToBackend(..), ToFrontend(..))
 
 
 type alias Model =
@@ -25,7 +25,7 @@ init =
     ( { message = "Hello!"
       , interactives = Interactives.empty
       , scroll = 0
-      , checksum = ""
+      , checksum = Checksum ""
       , fileName = Nothing
       , runOnHost = False
       }
@@ -39,11 +39,8 @@ update msg model =
         NoOpBackendMsg ->
             ( model, Cmd.none )
 
-        Open6RequestHost clientId ->
-            ( model, sendToFrontend clientId Open7RequestHostToFrontend )
-
-        Open2RequestLoad clientId fileName ->
-            ( model, sendToFrontend clientId (Open3RequestLoadToFrontend fileName) )
+        Open4RequestLoad clientId fileName ->
+            ( model, sendToFrontend clientId Open5RequestLoadToFrontend )
 
 
 updateFromFrontend : SessionId -> ClientId -> ToBackend -> Model -> ( Model, Cmd BackendMsg )
@@ -74,8 +71,5 @@ updateFromFrontend _ clientId msg model =
         NewRunOnHostToBackend runOnHost ->
             ( { model | runOnHost = runOnHost }, Cmd.none )
 
-        Open5ChecksumToBackend newChecksum ->
-            ( { model | checksum = newChecksum }, notifyIn (Open6RequestHost clientId) 1000 )
-
-        Open1FilenameToBackend fileName ->
-            ( { model | fileName = Just fileName }, notifyIn (Open2RequestLoad clientId fileName) 1000 )
+        Open3FilenameChecksumToBackend fileName checksum ->
+            ( { model | fileName = Just fileName, checksum = checksum }, notifyIn (Open4RequestLoad clientId fileName) 1000 )

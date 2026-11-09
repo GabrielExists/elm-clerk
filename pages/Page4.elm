@@ -12,21 +12,6 @@ import Types exposing (FrontendMsg)
 import Value
 
 
-viewerInt : Int -> Html msg
-viewerInt int =
-    Html.text (String.fromInt int)
-
-
-viewerIntList : List Int -> Html msg
-viewerIntList input =
-    input |> List.map String.fromInt |> String.join ", " |> Html.text
-
-
-viewerStringList : List String -> Html msg
-viewerStringList input =
-    input |> String.join ", " |> Html.text
-
-
 xValue : Int
 xValue =
     3
@@ -117,3 +102,7 @@ parenthesizedListTwo =
 foldl : (a -> b -> b) -> b -> List a -> b
 foldl =
     List.foldl
+
+
+minus a b =
+    a - b

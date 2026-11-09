@@ -24,7 +24,7 @@ type alias FrontendModel =
     { key : Key
     , currentFileName : Maybe FileName
     , source : Maybe FullCode
-    , checksum : Maybe String
+    , checksum : Maybe Checksum
     , error : String
     , fileList : List FileName
     , sections : List Section
@@ -51,7 +51,7 @@ type alias BackendModel =
     { message : String
     , interactives : Interactives
     , scroll : Float
-    , checksum : String
+    , checksum : Checksum
     , fileName : Maybe FileName
     , runOnHost : Bool
     }
@@ -173,6 +173,12 @@ type FileName
     = FileName String
 
 
+{-| The checksum of the contents of a page
+-}
+type Checksum
+    = Checksum String
+
+
 
 -- Messages
 
@@ -182,13 +188,13 @@ type FrontendMsg
     | UrlChanged Url
     | NoOpFrontendMsg
     | GotList (Result Http.Error (List String))
-    | Open4FetchedFile (Result Http.Error String)
-    | Open8FetchedElmJson (Result Http.Error Elm.Project.Project)
-    | Open9FetchedDepProject DependencyName (Result Http.Error Elm.Project.Project)
-    | Open10FetchedDepDoc DependencyName (Result Http.Error (List Elm.Docs.Module))
-    | Open11FetchedDefaults (Result Http.Error String)
-    | Open12WroteHost (Result Http.Error ())
-    | ListItemClicked FileName
+    | Open1FileName FileName
+    | Open2FetchedFile (Result Http.Error String)
+    | Open6FetchedElmJson (Result Http.Error Elm.Project.Project)
+    | Open7FetchedDepProject DependencyName (Result Http.Error Elm.Project.Project)
+    | Open8FetchedDepDoc DependencyName (Result Http.Error (List Elm.Docs.Module))
+    | Open9FetchedDefaults (Result Http.Error String)
+    | Open10WroteHost (Result Http.Error ())
     | ForceRefreshHost
     | InteractiveUpdated ( FunctionName, ParameterName ) RawInteractiveValue
     | CheckGenerateOutputs
@@ -205,21 +211,18 @@ type ToBackend
     | NewScrollToBackend Float
     | NewRunOnHostToBackend Bool
     | RequestStartup
-    | Open1FilenameToBackend FileName
-    | Open5ChecksumToBackend String
+    | Open3FilenameChecksumToBackend FileName Checksum
 
 
 type BackendMsg
     = NoOpBackendMsg
-    | Open2RequestLoad ClientId FileName
-    | Open6RequestHost ClientId
+    | Open4RequestLoad ClientId FileName
 
 
 type ToFrontend
     = NoOpToFrontend
-    | Startup { interactives : Interactives, scroll : Float, checksum : String, fileName : Maybe FileName, runOnHost : Bool }
-    | Open3RequestLoadToFrontend FileName
-    | Open7RequestHostToFrontend
+    | Startup { interactives : Interactives, scroll : Float, checksum : Checksum, fileName : Maybe FileName, runOnHost : Bool }
+    | Open5RequestLoadToFrontend
 
 
 type Section

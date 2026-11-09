@@ -317,7 +317,7 @@ checkDependencies model =
         ( model
         , Http.get
             { url = "/_x/read/src/DefaultViewers.elm"
-            , expect = Http.expectString Open11FetchedDefaults
+            , expect = Http.expectString Open9FetchedDefaults
             }
         )
 
