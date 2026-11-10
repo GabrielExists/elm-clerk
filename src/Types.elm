@@ -17,6 +17,7 @@ import Http
 import InterpreterTypes exposing (PartiallyAppliedFunction, Value)
 import Lamdera exposing (ClientId)
 import Parser exposing (DeadEnd)
+import Task exposing (Task)
 import Url exposing (Url)
 
 
@@ -36,9 +37,7 @@ type alias FrontendModel =
     , outputs : IdDict FunctionName Output
     , runOnHost : Bool
     , depMainProject : Maybe Elm.Project.ApplicationInfo
-    , depNames : List DependencyName
-    , depProjects : IdDict DependencyName Elm.Project.Project
-    , depDocs : IdDict DependencyName (List Elm.Docs.Module)
+    , dependencies : List DependencyBundle
     , depInferenceProject : Maybe Elm.TypeInference.Project
     }
 
@@ -69,12 +68,8 @@ type alias DependencyName =
     ( Elm.Package.Name, Elm.Version.Version )
 
 
-type alias DependencyRequest =
-    { name : DependencyName
-    , combinedName : String
-    , projectCmd : Cmd FrontendMsg
-    , docsCmd : Cmd FrontendMsg
-    }
+type alias DependencyBundle =
+    { name : DependencyName, project : Elm.Project.Project, docs : List Elm.Docs.Module }
 
 
 type alias Selection =
@@ -191,8 +186,7 @@ type FrontendMsg
     | Open1FileName FileName
     | Open2FetchedFile (Result Http.Error String)
     | Open6FetchedElmJson (Result Http.Error Elm.Project.Project)
-    | Open7FetchedDepProject DependencyName (Result Http.Error Elm.Project.Project)
-    | Open8FetchedDepDoc DependencyName (Result Http.Error (List Elm.Docs.Module))
+    | Open7FetchedDependencies (Result Http.Error (List DependencyBundle))
     | Open9FetchedDefaults (Result Http.Error String)
     | Open10WroteHost (Result Http.Error ())
     | ForceRefreshHost

@@ -23,7 +23,7 @@ import InterpreterTypes exposing (Env, Error(..), Eval, PartiallyAppliedFunction
 import Parser exposing (DeadEnd)
 import Result.Extra
 import ToString exposing (errorToString)
-import Types exposing (BackendMsg(..), Cell(..), Code(..), Constant, DependencyName, DependencyRequest, FileName(..), FrontendModel, FrontendMsg(..), FullCode(..), Function, FunctionName(..), IdDict, Interactives(..), Markdown(..), Output, OutputError(..), OutputValue(..), ParameterName(..), ParsedSection, RawInteractiveValue(..), Section(..), ToBackend(..), ToFrontend(..), TypeName(..), Viewer)
+import Types exposing (BackendMsg(..), Cell(..), Code(..), Constant, DependencyName, FileName(..), FrontendModel, FrontendMsg(..), FullCode(..), Function, FunctionName(..), IdDict, Interactives(..), Markdown(..), Output, OutputError(..), OutputValue(..), ParameterName(..), ParsedSection, RawInteractiveValue(..), Section(..), ToBackend(..), ToFrontend(..), TypeName(..), Viewer)
 import Utilities exposing (extractNameFromDeclarationNode)
 
 
@@ -309,56 +309,3 @@ maybeProject sources dependencies =
                     }
                     |> Result.mapError InferenceProjectError
             )
-
-
-checkDependencies : FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
-checkDependencies model =
-    if IdDict.size model.depProjects == List.length model.depNames && IdDict.size model.depDocs == List.length model.depNames then
-        ( model
-        , Http.get
-            { url = "/_x/read/src/DefaultViewers.elm"
-            , expect = Http.expectString Open9FetchedDefaults
-            }
-        )
-
-    else
-        ( model, Cmd.none )
-
-
-combineDependencies : List DependencyName -> IdDict DependencyName Project -> IdDict DependencyName (List Module) -> Result Error (List Elm.TypeInference.Dependency)
-combineDependencies depNames depProjects depDocs =
-    depNames
-        |> List.foldr
-            (\name acc ->
-                case acc of
-                    Err error ->
-                        Err error
-
-                    Ok dependencies ->
-                        case ( IdDict.get name depProjects, IdDict.get name depDocs ) of
-                            ( Just project, Just modules ) ->
-                                let
-                                    directDeps : List String
-                                    directDeps =
-                                        case project of
-                                            Application applicationInfo ->
-                                                applicationInfo.depsDirect
-                                                    |> List.map Tuple.first
-                                                    |> List.map Elm.Package.toString
-
-                                            Package packageInfo ->
-                                                packageInfo.deps
-                                                    |> List.map Tuple.first
-                                                    |> List.map Elm.Package.toString
-                                in
-                                { name = Tuple.first name |> Elm.Package.toString
-                                , dependencies = directDeps
-                                , modules = modules
-                                }
-                                    :: dependencies
-                                    |> Ok
-
-                            ( _, _ ) ->
-                                Err (StringError ("Dependency " ++ dependencyNameToString name ++ " was missing either elm.json or docs.json."))
-            )
-            (Ok [])

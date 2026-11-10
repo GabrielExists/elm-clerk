@@ -29,7 +29,7 @@ import Elm.Version
 import Eval.Expression
 import Eval.Module
 import FastDict as Dict exposing (Dict)
-import GetHostText exposing (checkDependencies, combineDependencies, dependencyNameToString, getHostText, makeFile, maybeProject)
+import GetHostText exposing (dependencyNameToString, getHostText, makeFile, maybeProject)
 import Hash
 import Host
 import Html
@@ -52,9 +52,9 @@ import Parser exposing (DeadEnd)
 import ParserFast
 import Regex
 import Result.Extra
-import Task
+import Task exposing (Task)
 import ToString exposing (errorToString, evalErrorDataToString, httpErrorToString)
-import Types exposing (BackendMsg(..), Cell(..), Checksum(..), Code(..), Constant, DependencyName, DependencyRequest, FileName(..), FrontendModel, FrontendMsg(..), FullCode(..), Function, FunctionName(..), IdDict, Interactives(..), Markdown(..), Output, OutputError(..), OutputValue(..), ParameterName(..), ParsedSection, RawInteractiveValue(..), Section(..), ToBackend(..), ToFrontend(..), TypeName(..), Viewer)
+import Types exposing (BackendMsg(..), Cell(..), Checksum(..), Code(..), Constant, DependencyBundle, DependencyName, FileName(..), FrontendModel, FrontendMsg(..), FullCode(..), Function, FunctionName(..), IdDict, Interactives(..), Markdown(..), Output, OutputError(..), OutputValue(..), ParameterName(..), ParsedSection, RawInteractiveValue(..), Section(..), ToBackend(..), ToFrontend(..), TypeName(..), Viewer)
 import UI.Source as Source
 import Url
 import Utilities exposing (extractNameFromDeclaration, extractPatternFromDeclaration)
@@ -103,9 +103,7 @@ init _ key =
       , reloadRequests = IdDict.empty (\(FunctionName functionName) -> functionName)
       , runOnHost = True
       , depMainProject = Nothing
-      , depNames = []
-      , depProjects = IdDict.empty dependencyNameToString
-      , depDocs = IdDict.empty dependencyNameToString
+      , dependencies = []
       , depInferenceProject = Nothing
       }
     , Cmd.batch
@@ -184,28 +182,28 @@ update msg model =
                                         ++ fileName
 
                                 --"docs.json"
-                                makeRequest : DependencyName -> DependencyRequest
+                                makeRequest : DependencyName -> ( String, Task Http.Error DependencyBundle )
                                 makeRequest name =
-                                    { name = name
-                                    , combinedName = dependencyNameToString name
-                                    , projectCmd =
-                                        Http.get
+                                    ( dependencyNameToString name
+                                    , Task.map2 (\a b -> { name = name, project = a, docs = b })
+                                        (httpTaskGet
                                             { url = makeUrl ( name, "elm.json" )
-                                            , expect = Http.expectJson (Open7FetchedDepProject name) Elm.Project.decoder
+                                            , resolver = jsonResolver Elm.Project.decoder
                                             }
-                                    , docsCmd =
-                                        Http.get
+                                        )
+                                        (httpTaskGet
                                             { url = makeUrl ( name, "docs.json" )
-                                            , expect = Http.expectJson (Open8FetchedDepDoc name) (Json.Decode.list Elm.Docs.decoder)
+                                            , resolver = jsonResolver (Json.Decode.list Elm.Docs.decoder)
                                             }
-                                    }
+                                        )
+                                    )
                             in
                             List.concat [ depsDirect, depsIndirect ]
                                 |> List.map makeRequest
-                                |> List.MyExtra.deduplicateByKey .combinedName
+                                |> List.MyExtra.deduplicateByKey Tuple.first
                                 |> (\requests ->
-                                        ( { model | depNames = List.map .name requests, depDocs = IdDict.clear model.depDocs, depProjects = IdDict.clear model.depProjects }
-                                        , Cmd.batch (List.map .projectCmd requests ++ List.map .docsCmd requests)
+                                        ( model
+                                        , List.map Tuple.second requests |> Task.sequence |> Task.attempt Open7FetchedDependencies
                                         )
                                    )
 
@@ -219,15 +217,15 @@ update msg model =
                 Err error ->
                     handleHtmlError model error "Open8FetchedElmJson"
 
-        Open7FetchedDepProject name result ->
+        Open7FetchedDependencies result ->
             case result of
-                Ok newProject ->
-                    let
-                        localModel : FrontendModel
-                        localModel =
-                            { model | depProjects = IdDict.insert name newProject model.depProjects }
-                    in
-                    checkDependencies localModel
+                Ok dependencies ->
+                    ( { model | dependencies = dependencies }
+                    , Http.get
+                        { url = "/_x/read/src/DefaultViewers.elm"
+                        , expect = Http.expectString Open9FetchedDefaults
+                        }
+                    )
 
                 Err error ->
                     { model
@@ -238,32 +236,39 @@ update msg model =
                     }
                         |> pure
 
-        Open8FetchedDepDoc name result ->
-            case result of
-                Ok newDoc ->
-                    let
-                        localModel : FrontendModel
-                        localModel =
-                            { model | depDocs = IdDict.insert name newDoc model.depDocs }
-                    in
-                    checkDependencies localModel
-
-                Err error ->
-                    handleHtmlError model error "Open9FetchedDepProject"
-
         Open9FetchedDefaults result ->
             case result of
                 Ok defaultViewersText ->
                     case model.source of
                         Just source ->
                             let
-                                dependenciesResult : Result Error (List Elm.TypeInference.Dependency)
-                                dependenciesResult =
-                                    combineDependencies model.depNames model.depProjects model.depDocs
+                                extractDirectDeps : Project -> List String
+                                extractDirectDeps project =
+                                    case project of
+                                        Application applicationInfo ->
+                                            applicationInfo.depsDirect
+                                                |> List.map Tuple.first
+                                                |> List.map Elm.Package.toString
+
+                                        Package packageInfo ->
+                                            packageInfo.deps
+                                                |> List.map Tuple.first
+                                                |> List.map Elm.Package.toString
+
+                                dependencies : List Elm.TypeInference.Dependency
+                                dependencies =
+                                    model.dependencies
+                                        |> List.map
+                                            (\bundle ->
+                                                { name = bundle.name |> Tuple.first |> Elm.Package.toString
+                                                , dependencies = extractDirectDeps bundle.project
+                                                , modules = bundle.docs
+                                                }
+                                            )
 
                                 projectResult : Result Error Elm.TypeInference.Project
                                 projectResult =
-                                    Result.andThen (\dependencies -> maybeProject [ source, FullCode defaultViewersText ] dependencies) dependenciesResult
+                                    maybeProject [ source, FullCode defaultViewersText ] dependencies
                             in
                             case projectResult of
                                 Ok project ->
@@ -484,6 +489,56 @@ updateCurrentChecksum model =
 
         _ ->
             ( model, Cmd.none )
+
+
+httpTaskGet :
+    { url : String
+    , resolver : Http.Resolver x a
+    }
+    -> Task x a
+httpTaskGet r =
+    Http.task
+        { method = "GET"
+        , headers = []
+        , url = r.url
+        , body = Http.emptyBody
+        , resolver = r.resolver
+        , timeout = Nothing
+        }
+
+
+jsonResolver : Json.Decode.Decoder value -> Http.Resolver Http.Error value
+jsonResolver decoder =
+    Http.stringResolver
+        (\response ->
+            case toHttpError response of
+                Ok body ->
+                    Json.Decode.decodeString decoder body
+                        |> Result.mapError Json.Decode.errorToString
+                        |> Result.mapError Http.BadBody
+
+                Err error ->
+                    Err error
+        )
+
+
+toHttpError : Http.Response value -> Result Http.Error value
+toHttpError response =
+    case response of
+        Http.GoodStatus_ _ body ->
+            Ok body
+
+        Http.BadUrl_ string ->
+            Http.BadUrl string |> Err
+
+        Http.Timeout_ ->
+            Http.Timeout |> Err
+
+        Http.NetworkError_ ->
+            Http.NetworkError |> Err
+
+        Http.BadStatus_ metadata _ ->
+            Http.BadStatus metadata.statusCode |> Err
 
 
 requestPage : FileName -> Cmd FrontendMsg
