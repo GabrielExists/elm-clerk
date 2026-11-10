@@ -14,7 +14,7 @@ import Value
 
 xValue : Int
 xValue =
-    3
+    1
 
 
 yValue : Int
@@ -102,7 +102,3 @@ parenthesizedListTwo =
 foldl : (a -> b -> b) -> b -> List a -> b
 foldl =
     List.foldl
-
-
-minus a b =
-    a - b

@@ -200,7 +200,9 @@ type FrontendMsg
     | CheckGenerateOutputs
     | ReloadFunction FunctionName Int
     | RunOnHostChanged Bool
-    | Poll
+    | PollScroll
+    | Refresh1Poll
+    | Refresh2FetchedFile (Result Http.Error String)
     | NewScroll Float
     | NoOp
 

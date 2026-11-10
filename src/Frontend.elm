@@ -6,6 +6,7 @@ import Browser.Dom
 import Browser.Navigation as Nav
 import Chart as C
 import Chart.Attributes as CA
+import Cmd.Extra exposing (add, pure, with)
 import Common exposing (notifyIn)
 import Element exposing (Attribute, Element, clipX, el, fill, height, maximum, paddingEach, paragraph, scrollbarX, scrollbarY, shrink, text, width)
 import Element.Background
@@ -113,7 +114,8 @@ init _ key =
             , expect = Http.expectJson GotList (Json.Decode.list Json.Decode.string)
             }
         , sendToBackend RequestStartup
-        , notifyIn Poll 4000
+        , notifyIn PollScroll 4000
+        , notifyIn Refresh1Poll 2000
         ]
     )
 
@@ -134,10 +136,10 @@ update msg model =
                     )
 
         UrlChanged _ ->
-            ( model, Cmd.none )
+            pure model
 
         NoOpFrontendMsg ->
-            ( model, Cmd.none )
+            pure model
 
         Open1FileName fileName ->
             ( { model
@@ -228,7 +230,13 @@ update msg model =
                     checkDependencies localModel
 
                 Err error ->
-                    handleHtmlError model error "Open9FetchedDepProject"
+                    { model
+                        | error =
+                            "Failed reading dependencies: "
+                                ++ httpErrorToString error
+                                ++ "\nHave you run prepare.py to put your dependencies in the elm-stuff folder?"
+                    }
+                        |> pure
 
         Open8FetchedDepDoc name result ->
             case result of
@@ -273,13 +281,13 @@ update msg model =
                                     handleError model error
 
                         Nothing ->
-                            ( { model | error = "Requested new source when there was no source yet" }, Cmd.none )
+                            { model | error = "Requested new source when there was no source yet" } |> pure
 
                 Err error ->
                     handleHtmlError model error "Open10FetchedDefaults"
 
         Open10WroteHost result ->
-            ( model, Cmd.none )
+            pure model
 
         GotList result ->
             case result of
@@ -339,7 +347,7 @@ update msg model =
                     ( { model | outputs = newOutputs }, Cmd.none )
 
                 _ ->
-                    ( model, Cmd.none )
+                    pure model
 
         ReloadFunction functionName requestIndex ->
             if requestIndex == (IdDict.get functionName model.reloadRequests |> Maybe.withDefault 0) then
@@ -360,24 +368,66 @@ update msg model =
                 ( { model | outputs = IdDict.insert functionName newOutput model.outputs }, Cmd.none )
 
             else
-                ( model, Cmd.none )
+                pure model
 
         RunOnHostChanged runOnHost ->
             ( { model | runOnHost = runOnHost }, sendToBackend (NewRunOnHostToBackend runOnHost) )
 
-        Poll ->
+        PollScroll ->
             let
                 checkViewport : Cmd FrontendMsg
                 checkViewport =
                     Task.perform (\viewport -> NewScroll viewport.viewport.y) Browser.Dom.getViewport
             in
-            ( model, Cmd.batch [ checkViewport, notifyIn Poll 4000 ] )
+            ( model, Cmd.batch [ checkViewport, notifyIn PollScroll 4000 ] )
+
+        Refresh1Poll ->
+            let
+                pair =
+                    with (notifyIn Refresh1Poll 2000) model
+            in
+            case model.currentFileName of
+                Just (FileName fileName) ->
+                    pair
+                        |> add
+                            (Http.get
+                                { url = "/_x/read/pages/" ++ fileName
+                                , expect = Http.expectString Refresh2FetchedFile
+                                }
+                            )
+
+                Nothing ->
+                    pair
+
+        Refresh2FetchedFile result ->
+            case result of
+                Ok source ->
+                    let
+                        checksum =
+                            source |> Hash.fromString |> Hash.toString
+
+                        previousChecksum =
+                            model.checksum |> Maybe.map (\(Checksum x) -> x) |> Maybe.withDefault ""
+                    in
+                    if checksum /= previousChecksum then
+                        let
+                            ( newModel, newCmd ) =
+                                updateCurrentChecksum (evaluateFullSource (FullCode source) model)
+                        in
+                        ( newModel, Cmd.batch [ newCmd, notifyIn CheckGenerateOutputs 100 ] )
+
+                    else
+                        pure model
+
+                Err error ->
+                    handleHtmlError model error "Open4FetchedFile"
 
         NewScroll y ->
-            ( model, sendToBackend (NewScrollToBackend y) )
+            pure model
+                |> add (sendToBackend (NewScrollToBackend y))
 
         NoOp ->
-            ( model, Cmd.none )
+            pure model
 
 
 updateFromBackend : ToFrontend -> Model -> ( Model, Cmd FrontendMsg )
