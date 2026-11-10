@@ -103,6 +103,7 @@ init _ key =
       , reloadRequests = IdDict.empty (\(FunctionName functionName) -> functionName)
       , runOnHost = True
       , depMainProject = Nothing
+      , depTotalDependencies = 0
       , dependencies = []
       , depInferenceProject = Nothing
       }
@@ -202,8 +203,8 @@ update msg model =
                                 |> List.map makeRequest
                                 |> List.MyExtra.deduplicateByKey Tuple.first
                                 |> (\requests ->
-                                        ( model
-                                        , List.map Tuple.second requests |> Task.sequence |> Task.attempt Open7FetchedDependencies
+                                        ( { model | dependencies = [], depTotalDependencies = List.length requests }
+                                        , List.map Tuple.second requests |> List.map (\task -> task |> Task.attempt Open7FetchedDependency) |> Cmd.batch
                                         )
                                    )
 
@@ -217,15 +218,29 @@ update msg model =
                 Err error ->
                     handleHtmlError model error "Open8FetchedElmJson"
 
-        Open7FetchedDependencies result ->
+        Open7FetchedDependency result ->
             case result of
-                Ok dependencies ->
-                    ( { model | dependencies = dependencies }
-                    , Http.get
-                        { url = "/_x/read/src/DefaultViewers.elm"
-                        , expect = Http.expectString Open9FetchedDefaults
-                        }
-                    )
+                Ok dependency ->
+                    let
+                        newDependencies : List DependencyBundle
+                        newDependencies =
+                            dependency :: model.dependencies
+
+                        pair : ( Model, Cmd msg )
+                        pair =
+                            pure { model | dependencies = newDependencies }
+                    in
+                    if List.length newDependencies == model.depTotalDependencies then
+                        pair
+                            |> add
+                                (Http.get
+                                    { url = "/_x/read/src/DefaultViewers.elm"
+                                    , expect = Http.expectString Open8FetchedDefaults
+                                    }
+                                )
+
+                    else
+                        pair
 
                 Err error ->
                     { model
@@ -236,7 +251,7 @@ update msg model =
                     }
                         |> pure
 
-        Open9FetchedDefaults result ->
+        Open8FetchedDefaults result ->
             case result of
                 Ok defaultViewersText ->
                     case model.source of
@@ -278,7 +293,7 @@ update msg model =
                                     , Http.post
                                         { url = "/_x/write/src/Host.elm"
                                         , body = Http.stringBody "application/text" (getHostText source (FullCode defaultViewersText) project)
-                                        , expect = Http.expectWhatever Open10WroteHost
+                                        , expect = Http.expectWhatever Open9WroteHost
                                         }
                                     )
 
@@ -291,7 +306,7 @@ update msg model =
                 Err error ->
                     handleHtmlError model error "Open10FetchedDefaults"
 
-        Open10WroteHost result ->
+        Open9WroteHost result ->
             pure model
 
         GotList result ->

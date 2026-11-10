@@ -38,6 +38,7 @@ type alias FrontendModel =
     , runOnHost : Bool
     , depMainProject : Maybe Elm.Project.ApplicationInfo
     , dependencies : List DependencyBundle
+    , depTotalDependencies : Int
     , depInferenceProject : Maybe Elm.TypeInference.Project
     }
 
@@ -186,9 +187,9 @@ type FrontendMsg
     | Open1FileName FileName
     | Open2FetchedFile (Result Http.Error String)
     | Open6FetchedElmJson (Result Http.Error Elm.Project.Project)
-    | Open7FetchedDependencies (Result Http.Error (List DependencyBundle))
-    | Open9FetchedDefaults (Result Http.Error String)
-    | Open10WroteHost (Result Http.Error ())
+    | Open7FetchedDependency (Result Http.Error DependencyBundle)
+    | Open8FetchedDefaults (Result Http.Error String)
+    | Open9WroteHost (Result Http.Error ())
     | ForceRefreshHost
     | InteractiveUpdated ( FunctionName, ParameterName ) RawInteractiveValue
     | CheckGenerateOutputs
