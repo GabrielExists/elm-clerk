@@ -99,7 +99,7 @@ getSelectorFromTypeName (TypeName typeName) =
 
 getViewerFromTypeName : IdDict TypeName Elm.Expression -> TypeName -> Elm.Expression
 getViewerFromTypeName viewers ((TypeName typeNameString) as typeName) =
-    if String.startsWith "Html " (Debug.log "typeNameString" typeNameString) || String.startsWith "Html.Html " typeNameString then
+    if String.startsWith "Html " typeNameString || String.startsWith "Html.Html " typeNameString then
         Elm.value
             { importFrom = []
             , name = "identity"
@@ -107,7 +107,7 @@ getViewerFromTypeName viewers ((TypeName typeNameString) as typeName) =
             }
 
     else
-        case IdDict.get (Debug.log "typeName" typeName) (Debug.log "viewers" viewers) of
+        case IdDict.get typeName viewers of
             Just expression ->
                 expression
 
@@ -376,7 +376,7 @@ declarationPatterns declaration =
 
 bigAnnotationToList : TypeAnnotation -> List TypeAnnotation
 bigAnnotationToList annotation =
-    case Debug.log "annotation" annotation of
+    case annotation of
         TypeAnnotation.FunctionTypeAnnotation first second ->
             (first
                 |> Node.value

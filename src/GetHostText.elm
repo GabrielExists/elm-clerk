@@ -167,7 +167,7 @@ getHostText fullSource defaultViewersSource project =
 
                                                             annotations : List TypeAnnotation
                                                             annotations =
-                                                                Elm.TypeInference.Type.toTypeAnnotation (Debug.log "Start annotation" inferredType)
+                                                                Elm.TypeInference.Type.toTypeAnnotation inferredType
                                                                     |> Boundary.bigAnnotationToList
 
                                                             patterns : List (Node Pattern)

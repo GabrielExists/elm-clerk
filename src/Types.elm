@@ -25,6 +25,7 @@ type alias FrontendModel =
     { key : Key
     , currentFileName : Maybe FileName
     , source : Maybe FullCode
+    , defaultViewers : Maybe FullCode
     , checksum : Maybe Checksum
     , error : String
     , fileList : List FileName
@@ -51,7 +52,6 @@ type alias BackendModel =
     { message : String
     , interactives : Interactives
     , scroll : Float
-    , checksum : Checksum
     , fileName : Maybe FileName
     , runOnHost : Bool
     }
@@ -184,20 +184,20 @@ type FrontendMsg
     | UrlChanged Url
     | NoOpFrontendMsg
     | GotList (Result Http.Error (List String))
+    | Startup3FetchedFile (Result Http.Error String)
+    | Startup4FetchedElmJson (Result Http.Error Elm.Project.Project)
+    | Startup5FetchedDependency (Result Http.Error DependencyBundle)
+    | Startup6FetchedDefaults (Result Http.Error String)
     | Open1FileName FileName
     | Open2FetchedFile (Result Http.Error String)
-    | Open6FetchedElmJson (Result Http.Error Elm.Project.Project)
-    | Open7FetchedDependency (Result Http.Error DependencyBundle)
-    | Open8FetchedDefaults (Result Http.Error String)
-    | Open9WroteHost (Result Http.Error ())
-    | ForceRefreshHost
+    | Open3AttemptCalculation
+    | Open4WroteHost (Result Http.Error ())
     | InteractiveUpdated ( FunctionName, ParameterName ) RawInteractiveValue
     | CheckGenerateOutputs
     | ReloadFunction FunctionName Int
     | RunOnHostChanged Bool
     | PollScroll
-    | Refresh1Poll
-    | Refresh2FetchedFile (Result Http.Error String)
+    | PollRefresh
     | NewScroll Float
     | NoOp
 
@@ -207,19 +207,17 @@ type ToBackend
     | InteractivesToBackend Interactives
     | NewScrollToBackend Float
     | NewRunOnHostToBackend Bool
-    | RequestStartup
-    | Open3FilenameChecksumToBackend FileName Checksum
+    | Startup1RequestStored
+    | FilenameToBackend FileName
 
 
 type BackendMsg
     = NoOpBackendMsg
-    | Open4RequestLoad ClientId FileName
 
 
 type ToFrontend
     = NoOpToFrontend
-    | Startup { interactives : Interactives, scroll : Float, checksum : Checksum, fileName : Maybe FileName, runOnHost : Bool }
-    | Open5RequestLoadToFrontend
+    | Startup2StoredToFrontend { interactives : Interactives, scroll : Float, fileName : Maybe FileName, runOnHost : Bool }
 
 
 type Section

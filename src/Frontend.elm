@@ -91,6 +91,7 @@ init _ key =
     ( { key = key
       , currentFileName = Nothing
       , source = Nothing
+      , defaultViewers = Nothing
       , checksum = Nothing
       , error = ""
       , fileList = []
@@ -112,9 +113,9 @@ init _ key =
             { url = "/_x/list/pages/"
             , expect = Http.expectJson GotList (Json.Decode.list Json.Decode.string)
             }
-        , sendToBackend RequestStartup
+        , sendToBackend Startup1RequestStored
         , notifyIn PollScroll 4000
-        , notifyIn Refresh1Poll 2000
+        , notifyIn PollRefresh 2000
         ]
     )
 
@@ -140,27 +141,18 @@ update msg model =
         NoOpFrontendMsg ->
             pure model
 
-        Open1FileName fileName ->
-            ( { model
-                | currentFileName = Just fileName
-                , outputs = IdDict.clear model.outputs
-              }
-            , requestPage fileName
-            )
-
-        Open2FetchedFile result ->
+        Startup3FetchedFile result ->
             case result of
                 Ok source ->
-                    let
-                        ( newModel, newCmd ) =
-                            updateCurrentChecksum (evaluateFullSource (FullCode source) model)
-                    in
-                    ( newModel, Cmd.batch [ newCmd, notifyIn CheckGenerateOutputs 100 ] )
+                    pure (evaluateFullSource (FullCode source) model)
+                        |> add (notifyIn CheckGenerateOutputs 100)
+                        |> add
+                            (Http.get { url = "/_x/read/elm.json", expect = Http.expectJson Startup4FetchedElmJson Elm.Project.decoder })
 
                 Err error ->
                     handleHtmlError model error "Open4FetchedFile"
 
-        Open6FetchedElmJson result ->
+        Startup4FetchedElmJson result ->
             case result of
                 Ok project ->
                     case project of
@@ -204,7 +196,7 @@ update msg model =
                                 |> List.MyExtra.deduplicateByKey Tuple.first
                                 |> (\requests ->
                                         ( { model | dependencies = [], depTotalDependencies = List.length requests }
-                                        , List.map Tuple.second requests |> List.map (\task -> task |> Task.attempt Open7FetchedDependency) |> Cmd.batch
+                                        , List.map Tuple.second requests |> List.map (\task -> task |> Task.attempt Startup5FetchedDependency) |> Cmd.batch
                                         )
                                    )
 
@@ -218,7 +210,7 @@ update msg model =
                 Err error ->
                     handleHtmlError model error "Open8FetchedElmJson"
 
-        Open7FetchedDependency result ->
+        Startup5FetchedDependency result ->
             case result of
                 Ok dependency ->
                     let
@@ -235,7 +227,7 @@ update msg model =
                             |> add
                                 (Http.get
                                     { url = "/_x/read/src/DefaultViewers.elm"
-                                    , expect = Http.expectString Open8FetchedDefaults
+                                    , expect = Http.expectString Startup6FetchedDefaults
                                     }
                                 )
 
@@ -251,7 +243,7 @@ update msg model =
                     }
                         |> pure
 
-        Open8FetchedDefaults result ->
+        Startup6FetchedDefaults result ->
             case result of
                 Ok defaultViewersText ->
                     case model.source of
@@ -287,15 +279,7 @@ update msg model =
                             in
                             case projectResult of
                                 Ok project ->
-                                    ( { model | depInferenceProject = Just project }
-                                      --, Cmd.none
-                                      --)
-                                    , Http.post
-                                        { url = "/_x/write/src/Host.elm"
-                                        , body = Http.stringBody "application/text" (getHostText source (FullCode defaultViewersText) project)
-                                        , expect = Http.expectWhatever Open9WroteHost
-                                        }
-                                    )
+                                    pure { model | depInferenceProject = Just project, defaultViewers = FullCode defaultViewersText |> Just }
 
                                 Err error ->
                                     handleError model error
@@ -306,7 +290,50 @@ update msg model =
                 Err error ->
                     handleHtmlError model error "Open10FetchedDefaults"
 
-        Open9WroteHost result ->
+        Open1FileName fileName ->
+            ( { model
+                | currentFileName = Just fileName
+                , outputs = IdDict.clear model.outputs
+              }
+            , Cmd.batch [ requestPage fileName, sendToBackend (FilenameToBackend fileName) ]
+            )
+
+        Open2FetchedFile result ->
+            case result of
+                Ok source ->
+                    if makeChecksum (FullCode source) |> Just |> checksumEqual Nothing |> not then
+                        let
+                            newModel =
+                                evaluateFullSource (FullCode source) model
+                        in
+                        ( newModel, Cmd.batch [ notifyIn CheckGenerateOutputs 100, notifyIn Open3AttemptCalculation 200 ] )
+
+                    else
+                        pure model
+
+                Err error ->
+                    handleHtmlError model error "Open4FetchedFile"
+
+        Open3AttemptCalculation ->
+            case model.depInferenceProject of
+                Nothing ->
+                    ( model, notifyIn Open3AttemptCalculation 500 )
+
+                Just project ->
+                    case ( model.source, model.defaultViewers ) of
+                        ( Just source, Just defaultViewers ) ->
+                            ( model
+                            , Http.post
+                                { url = "/_x/write/src/Host.elm"
+                                , body = Http.stringBody "application/text" (getHostText source defaultViewers project)
+                                , expect = Http.expectWhatever Open4WroteHost
+                                }
+                            )
+
+                        _ ->
+                            handleTextError model "Missing source or default viewers at calculation. They should always be filled at this point."
+
+        Open4WroteHost _ ->
             pure model
 
         GotList result ->
@@ -324,9 +351,6 @@ update msg model =
 
                 Err error ->
                     handleHtmlError model error "GotList"
-
-        ForceRefreshHost ->
-            fetchMainElmJson model
 
         InteractiveUpdated names value ->
             let
@@ -401,10 +425,10 @@ update msg model =
             in
             ( model, Cmd.batch [ checkViewport, notifyIn PollScroll 4000 ] )
 
-        Refresh1Poll ->
+        PollRefresh ->
             let
                 pair =
-                    with (notifyIn Refresh1Poll 2000) model
+                    with (notifyIn PollRefresh 2000) model
             in
             case model.currentFileName of
                 Just (FileName fileName) ->
@@ -412,35 +436,12 @@ update msg model =
                         |> add
                             (Http.get
                                 { url = "/_x/read/pages/" ++ fileName
-                                , expect = Http.expectString Refresh2FetchedFile
+                                , expect = Http.expectString Open2FetchedFile
                                 }
                             )
 
                 Nothing ->
                     pair
-
-        Refresh2FetchedFile result ->
-            case result of
-                Ok source ->
-                    let
-                        checksum =
-                            source |> Hash.fromString |> Hash.toString
-
-                        previousChecksum =
-                            model.checksum |> Maybe.map (\(Checksum x) -> x) |> Maybe.withDefault ""
-                    in
-                    if checksum /= previousChecksum then
-                        let
-                            ( newModel, newCmd ) =
-                                updateCurrentChecksum (evaluateFullSource (FullCode source) model)
-                        in
-                        ( newModel, Cmd.batch [ newCmd, notifyIn CheckGenerateOutputs 100 ] )
-
-                    else
-                        pure model
-
-                Err error ->
-                    handleHtmlError model error "Open4FetchedFile"
 
         NewScroll y ->
             pure model
@@ -456,54 +457,40 @@ updateFromBackend msg model =
         NoOpToFrontend ->
             ( model, Cmd.none )
 
-        Startup { interactives, scroll, checksum, fileName, runOnHost } ->
-            let
-                ( newModel, cmd ) =
-                    updateCurrentChecksum
-                        { model
-                            | interactives = interactives
-                            , checksum = Just checksum
-                            , currentFileName = fileName
-                            , runOnHost = runOnHost
-                        }
-            in
-            ( newModel
+        Startup2StoredToFrontend { interactives, scroll, fileName, runOnHost } ->
+            ( { model
+                | interactives = interactives
+                , currentFileName = fileName
+                , runOnHost = runOnHost
+              }
             , Cmd.batch
                 [ Task.perform (\_ -> NoOp) (Browser.Dom.setViewport 0 scroll)
-                , cmd
                 , case fileName of
-                    Just currentFileName ->
-                        requestPage currentFileName
+                    Just (FileName currentFileName) ->
+                        Http.get
+                            { url = "/_x/read/pages/" ++ currentFileName
+                            , expect = Http.expectString Startup3FetchedFile
+                            }
 
                     Nothing ->
                         notifyIn CheckGenerateOutputs 100
                 ]
             )
 
-        Open5RequestLoadToFrontend ->
-            fetchMainElmJson model
+
+makeChecksum : FullCode -> Checksum
+makeChecksum (FullCode source) =
+    source |> Hash.fromString |> Hash.toString |> Checksum
 
 
-updateCurrentChecksum : Model -> ( Model, Cmd FrontendMsg )
-updateCurrentChecksum model =
-    case ( model.source, model.checksum, model.currentFileName ) of
-        ( Just (FullCode source), Just (Checksum modelChecksum), Just filename ) ->
-            let
-                checksum =
-                    source |> Hash.fromString |> Hash.toString
-            in
-            if checksum == modelChecksum then
-                ( model, Cmd.none )
-
-            else
-                ( { model | checksum = Just (Checksum checksum) }
-                , Cmd.batch
-                    [ sendToBackend (Open3FilenameChecksumToBackend filename (Checksum checksum))
-                    ]
-                )
+checksumEqual : Maybe Checksum -> Maybe Checksum -> Bool
+checksumEqual first second =
+    case ( first, second ) of
+        ( Just (Checksum firstText), Just (Checksum secondText) ) ->
+            firstText == secondText
 
         _ ->
-            ( model, Cmd.none )
+            False
 
 
 httpTaskGet :
@@ -562,16 +549,6 @@ requestPage (FileName fileName) =
         { url = "/_x/read/pages/" ++ fileName
         , expect = Http.expectString Open2FetchedFile
         }
-
-
-fetchMainElmJson : FrontendModel -> ( FrontendModel, Cmd FrontendMsg )
-fetchMainElmJson model =
-    ( model
-    , Http.get
-        { url = "/_x/read/elm.json"
-        , expect = Http.expectJson Open6FetchedElmJson Elm.Project.decoder
-        }
-    )
 
 
 handleHtmlError : FrontendModel -> Http.Error -> String -> ( FrontendModel, Cmd msg )
@@ -1112,7 +1089,6 @@ view model =
                             |> Element.el [ Element.paddingXY 0 4 ]
                             |> List.singleton
                        )
-                    ++ [ Element.Input.button [] { onPress = Just ForceRefreshHost, label = Element.text "Force refresh of host functions." } ]
                     ++ (if overrideAlwaysHost then
                             []
 

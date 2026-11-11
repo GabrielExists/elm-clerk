@@ -1,5 +1,6 @@
 module Backend exposing (Model, app)
 
+import Cmd.Extra exposing (pure)
 import Common exposing (notifyIn)
 import FastDict as Dict
 import Interactives
@@ -25,7 +26,6 @@ init =
     ( { message = "Hello!"
       , interactives = Interactives.empty
       , scroll = 0
-      , checksum = Checksum ""
       , fileName = Nothing
       , runOnHost = False
       }
@@ -39,26 +39,22 @@ update msg model =
         NoOpBackendMsg ->
             ( model, Cmd.none )
 
-        Open4RequestLoad clientId fileName ->
-            ( model, sendToFrontend clientId Open5RequestLoadToFrontend )
-
 
 updateFromFrontend : SessionId -> ClientId -> ToBackend -> Model -> ( Model, Cmd BackendMsg )
 updateFromFrontend _ clientId msg model =
     case msg of
         NoOpToBackend ->
-            ( model, Cmd.none )
+            pure model
 
         InteractivesToBackend interactives ->
-            ( { model | interactives = interactives }, Cmd.none )
+            pure { model | interactives = interactives }
 
-        RequestStartup ->
+        Startup1RequestStored ->
             ( model
             , sendToFrontend clientId
-                (Startup
+                (Startup2StoredToFrontend
                     { interactives = model.interactives
                     , scroll = model.scroll
-                    , checksum = model.checksum
                     , fileName = model.fileName
                     , runOnHost = model.runOnHost
                     }
@@ -66,10 +62,10 @@ updateFromFrontend _ clientId msg model =
             )
 
         NewScrollToBackend y ->
-            ( { model | scroll = y }, Cmd.none )
+            pure { model | scroll = y }
 
         NewRunOnHostToBackend runOnHost ->
-            ( { model | runOnHost = runOnHost }, Cmd.none )
+            pure { model | runOnHost = runOnHost }
 
-        Open3FilenameChecksumToBackend fileName checksum ->
-            ( { model | fileName = Just fileName, checksum = checksum }, notifyIn (Open4RequestLoad clientId fileName) 1000 )
+        FilenameToBackend fileName ->
+            pure { model | fileName = Just fileName }
