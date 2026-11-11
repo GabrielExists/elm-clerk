@@ -905,11 +905,11 @@ applyPartiallyApplied evalInteractives partiallyApplied declaration =
             Dict.insert binding value localValues
 
         insertIntoEnvFromType : ( ParameterName, TypeName ) -> Dict String Value -> Result OutputError (Dict String Value)
-        insertIntoEnvFromType ( ParameterName binding, TypeName typeName ) localValues =
+        insertIntoEnvFromType ( ParameterName binding, typeName ) localValues =
             let
                 maybeTypeNode : Maybe InteractiveElement
                 maybeTypeNode =
-                    Dict.get typeName Boundary.typeNodeMap
+                    IdDict.get typeName Boundary.typeNodeMap
 
                 maybeRawValue : Maybe RawInteractiveValue
                 maybeRawValue =
@@ -989,11 +989,11 @@ applyPartiallyAppliedHost interactives function hostFunction functionName declar
             Boundary.parseTogether (patterns |> List.map Node.value) declaration (List.length alreadyApplied)
 
         find : ( ParameterName, TypeName ) -> Result OutputError Value
-        find ( parameterName, TypeName typeName ) =
+        find ( parameterName, typeName ) =
             let
                 maybeTypeNode : Result OutputError InteractiveElement
                 maybeTypeNode =
-                    Dict.get typeName Boundary.typeNodeMap |> Result.fromMaybe (OutputError "No matching type node")
+                    IdDict.get typeName Boundary.typeNodeMap |> Result.fromMaybe (OutputError "No matching type node")
 
                 maybeRawValue : Result OutputError RawInteractiveValue
                 maybeRawValue =
@@ -1268,15 +1268,15 @@ viewSection viewers outputs functions interactives section =
 
 
 viewInteractive : Interactives -> FunctionName -> ( ParameterName, TypeName ) -> Element FrontendMsg
-viewInteractive interactives functionName ( (ParameterName bindingString) as binding, TypeName typeName ) =
+viewInteractive interactives functionName ( (ParameterName bindingString) as binding, (TypeName typeNameString) as typeName ) =
     let
         maybeValue : Maybe RawInteractiveValue
         maybeValue =
             Interactives.get ( functionName, binding ) interactives
     in
-    case Dict.get typeName Boundary.typeNodeMap of
+    case IdDict.get typeName Boundary.typeNodeMap of
         Nothing ->
-            viewOutputError (OutputError (bindingString ++ " - Interactive input of \"" ++ typeName ++ "\" not supported"))
+            viewOutputError (OutputError (bindingString ++ " - Interactive input of \"" ++ typeNameString ++ "\" not supported"))
 
         Just interactiveElement ->
             Element.Lazy.lazy3 interactiveElement.element functionName binding maybeValue

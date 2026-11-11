@@ -4,20 +4,17 @@ import Boundary exposing (InteractiveElement)
 import Dict as SlowDict
 import Elm
 import Elm.Annotation
-import Elm.Docs exposing (Module)
 import Elm.Package
 import Elm.Parser
-import Elm.Project exposing (Project(..))
 import Elm.Syntax.Declaration exposing (Declaration)
 import Elm.Syntax.File exposing (File)
 import Elm.Syntax.Module as Module
 import Elm.Syntax.Node as Node exposing (Node(..))
 import Elm.Syntax.Pattern exposing (Pattern)
-import Elm.Syntax.TypeAnnotation as TypeAnnotation exposing (TypeAnnotation)
+import Elm.Syntax.TypeAnnotation exposing (TypeAnnotation)
 import Elm.TypeInference
 import Elm.TypeInference.Type
 import Elm.Version
-import Http
 import IdDict
 import InterpreterTypes exposing (Env, Error(..), Eval, PartiallyAppliedFunction(..), Value(..))
 import Parser exposing (DeadEnd)

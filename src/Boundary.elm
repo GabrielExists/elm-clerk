@@ -140,23 +140,15 @@ type alias InteractiveElement =
     }
 
 
-typeNodeMap : Dict String InteractiveElement
+typeNodeMap : IdDict TypeName InteractiveElement
 typeNodeMap =
     [ interactiveElementInt
     , interactiveElementChar
     , interactiveElementString
     ]
         |> List.map
-            (\x ->
-                ( let
-                    (TypeName key) =
-                        x.key
-                  in
-                  key
-                , x
-                )
-            )
-        |> Dict.fromList
+            (\x -> ( x.key, x ))
+        |> IdDict.fromList (\(TypeName name) -> name)
 
 
 interactiveElementInt : InteractiveElement

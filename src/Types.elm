@@ -1,8 +1,10 @@
 module Types exposing (..)
 
+import Boundary exposing (InteractiveElement)
 import Browser exposing (UrlRequest)
 import Browser.Navigation exposing (Key)
 import Element exposing (Element)
+import Elm.CodeGen as Elm
 import Elm.Dependency
 import Elm.Docs
 import Elm.Package
@@ -74,7 +76,13 @@ type alias DependencyBundle =
 
 
 type alias Selection =
-    {}
+    { parameters : List ParameterSelection }
+
+
+type alias ParameterSelection =
+    { selector : Elm.Expression
+    , typeNode : InteractiveElement
+    }
 
 
 type alias Output =
